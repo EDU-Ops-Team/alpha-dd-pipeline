@@ -1,0 +1,402 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://alpha-dd-pipeline/schemas/inspection_vendor/v1.0.0",
+  "title": "inspection_vendor",
+  "description": "Structured output of WU-07 Vendor Building Inspection Extraction. Represents fully extracted data from a completed Worksmith pre-filled inspection checklist.",
+  "type": "object",
+  "required": ["inspection_vendor"],
+  "properties": {
+    "inspection_vendor": {
+      "type": "object",
+      "required": [
+        "extracted_at",
+        "address",
+        "inspector_name",
+        "inspection_date",
+        "overall_recommendation",
+        "deal_killer_flags",
+        "sections",
+        "cost_estimates",
+        "deficiency_summary"
+      ],
+      "properties": {
+
+        "extracted_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of when this extraction was performed."
+        },
+
+        "source_doc_url": {
+          "type": ["string", "null"],
+          "description": "URL or filename of the returned Worksmith checklist document."
+        },
+
+        "address": {
+          "type": "string",
+          "description": "Full property address as written in the inspection checklist header block. Must match site_meta.address (fuzzy)."
+        },
+
+        "inspector_name": {
+          "type": "string",
+          "description": "Inspector name and/or firm as stated in the header block."
+        },
+
+        "inspection_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Date of inspection in ISO 8601 format (YYYY-MM-DD)."
+        },
+
+        "overall_recommendation": {
+          "type": "string",
+          "enum": ["PROCEED", "PROCEED WITH CAUTION", "REQUIRES JUSTIFICATION", "PASS"],
+          "description": "Inspector's overall site recommendation. Must be one of 4 standard values. Non-standard language is mapped per SKILL.md Rule 8."
+        },
+
+        "deal_killer_flags": {
+          "type": "object",
+          "description": "Responses to the 5 mandatory binary safety questions. Any 'no' triggers an early-exit flag.",
+          "required": [
+            "safe_dropoff",
+            "adequate_exits",
+            "exit_doors_compliant",
+            "structurally_sound",
+            "no_hazmat_visible",
+            "any_no"
+          ],
+          "properties": {
+            "safe_dropoff": {
+              "type": "string",
+              "enum": ["yes", "no", "needs_evaluation"],
+              "description": "Is the drop-off zone safe for children?"
+            },
+            "adequate_exits": {
+              "type": "string",
+              "enum": ["yes", "no", "needs_evaluation"],
+              "description": "Does the building have 2 or more usable exits?"
+            },
+            "exit_doors_compliant": {
+              "type": "string",
+              "enum": ["yes", "no", "needs_evaluation"],
+              "description": "Are exit doors compliant (width, hardware, swing direction)?"
+            },
+            "structurally_sound": {
+              "type": "string",
+              "enum": ["yes", "no", "needs_evaluation"],
+              "description": "Is the building structurally sound?"
+            },
+            "no_hazmat_visible": {
+              "type": "string",
+              "enum": ["yes", "no", "needs_evaluation"],
+              "description": "Is there no visible hazardous material (asbestos, lead, mold)?"
+            },
+            "any_no": {
+              "type": "boolean",
+              "description": "True if ANY of the 5 deal-killer questions was answered 'no'. Triggers immediate review flag."
+            }
+          },
+          "additionalProperties": false
+        },
+
+        "sections": {
+          "type": "object",
+          "description": "All 11 inspection section tables. Each section contains an array of item objects.",
+          "required": [
+            "exterior_site",
+            "parking_dropoff",
+            "entry_egress",
+            "fire_alarm",
+            "sprinkler",
+            "emergency_systems",
+            "restrooms_plumbing",
+            "ada",
+            "structural",
+            "hvac_mechanical",
+            "electrical"
+          ],
+          "properties": {
+
+            "exterior_site": {
+              "$ref": "#/definitions/inspection_section",
+              "description": "Section 1: Exterior / Site Assessment"
+            },
+            "parking_dropoff": {
+              "$ref": "#/definitions/inspection_section",
+              "description": "Section 2: Parking / Drop-off"
+            },
+            "entry_egress": {
+              "$ref": "#/definitions/inspection_section",
+              "description": "Section 3: Entry / Egress"
+            },
+            "fire_alarm": {
+              "$ref": "#/definitions/inspection_section",
+              "description": "Section 4: Fire Alarm"
+            },
+            "sprinkler": {
+              "$ref": "#/definitions/inspection_section",
+              "description": "Section 5: Sprinkler"
+            },
+            "emergency_systems": {
+              "$ref": "#/definitions/inspection_section",
+              "description": "Section 6: Emergency Systems"
+            },
+            "restrooms_plumbing": {
+              "$ref": "#/definitions/inspection_section",
+              "description": "Section 7: Restrooms / Plumbing"
+            },
+            "ada": {
+              "$ref": "#/definitions/inspection_section",
+              "description": "Section 8: ADA"
+            },
+            "structural": {
+              "$ref": "#/definitions/inspection_section",
+              "description": "Section 9: Structural"
+            },
+            "hvac_mechanical": {
+              "$ref": "#/definitions/inspection_section",
+              "description": "Section 10: HVAC / Mechanical"
+            },
+            "electrical": {
+              "$ref": "#/definitions/inspection_section",
+              "description": "Section 11: Electrical"
+            }
+
+          },
+          "additionalProperties": false
+        },
+
+        "occupant_load": {
+          "type": "object",
+          "description": "Computed occupant load values from the inspector's Occupant Load Verification section.",
+          "properties": {
+            "net_floor_area_sf": {
+              "type": ["integer", "null"],
+              "description": "Total net floor area (SF) used in occupant load formula. Null if inspector left blank."
+            },
+            "total_occupant_load": {
+              "type": ["integer", "null"],
+              "description": "Computed total occupant load (net floor area ÷ code factor). Null if inspector left blank."
+            },
+            "net_learning_area_sf": {
+              "type": ["integer", "null"],
+              "description": "Net learning area (SF) used in student capacity formula. Null if inspector left blank."
+            },
+            "student_capacity": {
+              "type": ["integer", "null"],
+              "description": "Computed student capacity (net learning area ÷ 20 SF/student or per code). Null if inspector left blank."
+            }
+          },
+          "additionalProperties": false
+        },
+
+        "cost_estimates": {
+          "type": "array",
+          "description": "All rows from the cost estimate table, extracted as-is. Do not modify figures.",
+          "items": {
+            "$ref": "#/definitions/cost_estimate_item"
+          }
+        },
+
+        "deficiency_summary": {
+          "type": "object",
+          "description": "Computed summary counts and cost totals derived from cost_estimates. Computed by WU-07 — not extracted from the document.",
+          "required": [
+            "critical_count",
+            "important_count",
+            "minor_count",
+            "total_remediation_low",
+            "total_remediation_high"
+          ],
+          "properties": {
+            "critical_count": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of cost estimate rows with priority = CRITICAL."
+            },
+            "important_count": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of cost estimate rows with priority = IMPORTANT."
+            },
+            "minor_count": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of cost estimate rows with priority = MINOR."
+            },
+            "total_remediation_low": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Sum of all low_estimate values. Null estimates contribute 0."
+            },
+            "total_remediation_high": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Sum of all high_estimate values. Null estimates contribute 0."
+            }
+          },
+          "additionalProperties": false
+        },
+
+        "specialist_referrals": {
+          "type": "array",
+          "description": "Specialist referrals found anywhere in the document (section notes, tasks, overall assessment).",
+          "items": {
+            "type": "object",
+            "required": ["type", "reason"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "structural engineer",
+                  "MEP engineer",
+                  "fire protection engineer",
+                  "environmental",
+                  "other"
+                ],
+                "description": "Category of specialist required."
+              },
+              "reason": {
+                "type": "string",
+                "description": "Verbatim inspector language triggering this referral."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+
+        "site_specific_tasks": {
+          "type": "array",
+          "description": "D-confidence SIR items that did not map to standard template rows, listed as numbered tasks in the checklist.",
+          "items": {
+            "type": "object",
+            "required": ["task_number", "task"],
+            "properties": {
+              "task_number": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Sequential task number as numbered in the document."
+              },
+              "task": {
+                "type": "string",
+                "description": "Full task description verbatim."
+              },
+              "finding": {
+                "type": ["string", "null"],
+                "description": "Inspector's written response. Null if blank."
+              },
+              "documentation": {
+                "type": ["string", "null"],
+                "description": "Photo reference, citation, or document noted by the inspector. Null if blank."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+
+        "vendor_notes": {
+          "type": "string",
+          "description": "Free-text field for extraction warnings, deal-killer flags, ambiguous language, date discrepancies, missing claim-ids, null estimates, and any other issues noted during extraction."
+        }
+
+      },
+      "additionalProperties": false
+    }
+  },
+
+  "definitions": {
+
+    "inspection_section": {
+      "type": "object",
+      "required": ["items"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "description": "All rows extracted from this section's table, in document order.",
+          "items": {
+            "$ref": "#/definitions/inspection_item"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "inspection_item": {
+      "type": "object",
+      "required": ["item", "confirmed", "classification"],
+      "properties": {
+        "item": {
+          "type": "string",
+          "description": "Item name from the first column of the table row. Verbatim."
+        },
+        "ai_prefill": {
+          "type": ["string", "null"],
+          "description": "The AI pre-fill text from the second column. Null if the AI had no data for this row."
+        },
+        "confirmed": {
+          "type": "boolean",
+          "description": "Whether the inspector checked the Confirmed checkbox. true = ☑, false = ☐."
+        },
+        "finding": {
+          "type": ["string", "null"],
+          "description": "Inspector's finding from the Finding column. Null if the inspector left it blank."
+        },
+        "source_citation": {
+          "type": ["string", "null"],
+          "description": "Content of the Source/Citation column. Verbatim. Null if blank."
+        },
+        "notes": {
+          "type": ["string", "null"],
+          "description": "Content of the Notes column. Verbatim. Null if blank."
+        },
+        "claim_id": {
+          "type": ["string", "null"],
+          "description": "Claim-id extracted from the HTML comment following this row (format: SIR-XXXX-YYYYMMDD-NNN). Null if no comment present. Never regenerated — preserved exactly as found."
+        },
+        "classification": {
+          "type": "string",
+          "enum": ["confirmed", "corrected", "new_finding", "unverified"],
+          "description": "Row classification: confirmed = AI and inspector agree + confirmed=true; corrected = AI exists and inspector differs with confirmed=false; new_finding = no AI prefill but inspector added a finding; unverified = both blank."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "cost_estimate_item": {
+      "type": "object",
+      "required": ["item", "description", "priority"],
+      "properties": {
+        "item": {
+          "type": "string",
+          "enum": ["Fire Alarm", "Egress", "ADA", "Plumbing", "HVAC", "Electrical", "Structural", "Other"],
+          "description": "Standard cost category. One of 8 values."
+        },
+        "description": {
+          "type": "string",
+          "description": "Verbatim description from the table row."
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["CRITICAL", "IMPORTANT", "MINOR"],
+          "description": "Deficiency priority level. Mapped from inspector language per condition-scale.md."
+        },
+        "low_estimate": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "Low cost estimate in USD. Null if inspector left blank. Dollar signs and commas stripped before storage."
+        },
+        "high_estimate": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "High cost estimate in USD. Null if inspector left blank. Dollar signs and commas stripped before storage."
+        },
+        "notes": {
+          "type": ["string", "null"],
+          "description": "Verbatim notes from the cost estimate table. Null if blank."
+        }
+      },
+      "additionalProperties": false
+    }
+
+  }
+}

@@ -1,0 +1,331 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.alpha.internal/sir/shared-sir-schema.json",
+  "title": "Shared SIR Schema",
+  "description": "Defines the canonical field set shared by sir_ai (WU-02) and sir_vendor (WU-06). Field names must match exactly in both records. WU-09 delta computation compares these records field-by-field. Fields with the same name in both records are considered for delta analysis.",
+  "type": "object",
+
+  "required": [
+    "address",
+    "zoning_status",
+    "permit_type",
+    "timeline_best_weeks",
+    "timeline_worst_weeks",
+    "authority_chain",
+    "code_framework",
+    "feasibility"
+  ],
+
+  "properties": {
+
+    "address": {
+      "type": "string",
+      "description": "Full street address. Must match site_meta.address after normalization. Used as the primary human-readable site identifier in reports."
+    },
+
+    "zoning_status": {
+      "type": ["string", "null"],
+      "description": "Canonical zoning permission status for the intended educational use. Must be normalized using vendor-terminology-map.md before writing. Examples: 'Permitted by right', 'Conditional Use Permit', 'Special Use Permit', 'Prohibited'.",
+      "examples": [
+        "Permitted by right",
+        "Conditional Use Permit",
+        "Special Use Permit",
+        "Variance Required",
+        "Prohibited"
+      ]
+    },
+
+    "permit_type": {
+      "type": ["string", "null"],
+      "description": "The specific permit path required. May be a single permit or a compound path. Normalized to the jurisdiction's actual permit name.",
+      "examples": [
+        "Building Permit",
+        "Use Permit + Building Permit",
+        "Conditional Use Permit + Building Permit",
+        "Change of Occupancy Permit"
+      ]
+    },
+
+    "timeline_best_weeks": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Best-case total weeks from permit application to certificate of occupancy, counting all sequential blocking steps. Represents optimistic throughput with no reviews taking longer than the fast end of their published range."
+    },
+
+    "timeline_worst_weeks": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Worst-case total weeks from permit application to certificate of occupancy, including all sequential blocking steps plus realistic delays at each review stage."
+    },
+
+    "authority_chain": {
+      "type": "array",
+      "description": "Ordered list of all authorities with jurisdiction over this site and use. Must include all applicable: planning, building, fire, health, public works, state fire marshal, childcare/education regulators.",
+      "items": {
+        "type": "object",
+        "required": ["authority", "name", "role"],
+        "properties": {
+          "authority": {
+            "type": "string",
+            "description": "Functional category of the authority.",
+            "examples": ["Planning", "Building", "Fire", "Health", "State Fire Marshal", "Public Works", "Education Regulator"]
+          },
+          "name": {
+            "type": "string",
+            "description": "Full name of the department or agency."
+          },
+          "role": {
+            "type": "string",
+            "description": "What this authority controls or approves in plain English."
+          },
+          "contact": {
+            "type": ["string", "null"],
+            "description": "Phone number, email address, or office address. Null if not available."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+
+    "code_framework": {
+      "type": "object",
+      "description": "The controlling code editions adopted by this jurisdiction. Must reflect the jurisdiction's actual adopted version, not the latest IBC/IFC edition.",
+      "required": ["building_code", "fire_code", "health_code"],
+      "properties": {
+        "building_code": {
+          "type": ["string", "null"],
+          "description": "Adopted building code edition, including any local amendments. Format: '{code name} {year} [as amended]'. Example: '2021 IBC as amended by State Amendment Package 2024'."
+        },
+        "fire_code": {
+          "type": ["string", "null"],
+          "description": "Adopted fire code edition. When the fire authority refuses pre-submittal engagement, this field must remain null or be flagged explicitly — do not infer from state base code alone."
+        },
+        "health_code": {
+          "type": ["string", "null"],
+          "description": "Controlling health and sanitation code. For FL K-12 private schools: cite FAC 6A-2.0040 and FAC 4E-11. For childcare-licensed programs: cite FAC 65C-22."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "feasibility": {
+      "type": "object",
+      "description": "School conversion feasibility calculations for this site. All values represent the state of the building as of the most recent site investigation.",
+      "required": ["occupancy_compatibility", "sprinkler_trigger", "bathroom_requirement", "construction_scope"],
+      "properties": {
+
+        "occupancy_compatibility": {
+          "type": ["string", "null"],
+          "description": "Plain-English statement of current occupancy vs required Group E occupancy. Describes whether a change-of-occupancy permit is required and any key compatibility factors.",
+          "examples": [
+            "Current: Group B (Office). Change to Group E required.",
+            "Current: Group E (School). No occupancy change needed.",
+            "Current: Group M (Retail). Change to Group E required — significant code upgrade triggers expected."
+          ]
+        },
+
+        "sprinkler_trigger": {
+          "type": ["boolean", "null"],
+          "description": "True if a sprinkler system retrofit is triggered by the proposed occupancy and scope. Based on fire area calculation (Group E trigger at 12,000 SF fire area) and any below-grade space. Null when construction type or fire area is unknown (D-confidence)."
+        },
+
+        "bathroom_requirement": {
+          "type": ["string", "null"],
+          "description": "Plumbing fixture requirement statement. Format: 'X required / Y existing' or plain-English description of gap. Based on Group E occupancy plumbing tables from the controlling IBC edition.",
+          "examples": [
+            "4 water closets required (2M/2F) / 3 existing — 1 additional required",
+            "6 water closets required / 4 existing — 2 additional required",
+            "Meets requirements — 4 required / 6 existing"
+          ]
+        },
+
+        "construction_scope": {
+          "type": "array",
+          "description": "Checklist of physical construction and renovation items triggered by the occupancy change and code analysis. Each item states WHAT and WHY. Order by cost, largest first.",
+          "items": {
+            "type": "string",
+            "description": "Single scope line: '[Item] — [Reason/trigger in plain English]'. Example: 'Sprinkler system retrofit — required because fire area exceeds 12,000 SF for Group E'."
+          }
+        }
+
+      },
+      "additionalProperties": false
+    },
+
+    "unknowns": {
+      "type": "array",
+      "description": "Items that could not be determined from available sources. Present in sir_ai (D-confidence items); in sir_vendor these may be resolved or still remain open.",
+      "items": {
+        "type": "object",
+        "required": ["item", "why_it_matters", "field_only"],
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "What is unknown."
+          },
+          "why_it_matters": {
+            "type": "string",
+            "description": "Which decision this unknown blocks or complicates."
+          },
+          "field_only": {
+            "type": "boolean",
+            "description": "True if this can only be resolved by a physical site visit. False if remote research could resolve it."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+
+    "report_url": {
+      "type": ["string", "null"],
+      "description": "Google Drive URL of the full human-readable SIR document. For sir_ai: the AI SIR report. For sir_vendor: the CDS verification summary markdown."
+    },
+
+    "confidence_labels": {
+      "type": "object",
+      "description": "Per-field confidence level from the most authoritative source. Keys are field names from this schema. Values are A, B, C, or D. For sir_vendor: reflects CDS confidence where CDS verified, AI confidence where carried forward.",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["A", "B", "C", "D"],
+        "description": "A = Verified from authoritative source. B = High-confidence inferred (reliable source). C = Inferred/estimated. D = Unknown/unresolved."
+      }
+    }
+
+  },
+
+  "additionalProperties": false,
+
+  "definitions": {
+
+    "ConfidenceLevel": {
+      "type": "string",
+      "enum": ["A", "B", "C", "D"],
+      "description": "A = Verified (authoritative source: county assessor, FEMA, permit records, staff confirmation). B = High-confidence inferred (reliable source: business listing, satellite imagery, published code, fee schedule). C = Inferred/estimated (calculated values, independent online research without staff confirmation). D = Unknown (requires verification — remote-researchable or field-only)."
+    },
+
+    "VerificationStatus": {
+      "type": "string",
+      "enum": [
+        "confirmed",
+        "confirmed_unsourced",
+        "corrected",
+        "corrected_unsourced",
+        "unverified",
+        "unverified_with_source_note"
+      ],
+      "description": "confirmed: CDS verified the AI finding with a cited source. confirmed_unsourced: CDS agreed but provided no source. corrected: CDS found a different value with a cited source. corrected_unsourced: CDS found a different value but provided no source — flag for human review. unverified: CDS left the row blank. unverified_with_source_note: CDS noted a source but left the finding blank."
+    },
+
+    "VerifiedItem": {
+      "type": "object",
+      "required": ["claim_id", "field", "ai_finding", "ai_confidence", "status"],
+      "properties": {
+        "claim_id": {
+          "type": "string",
+          "pattern": "^SIR-[0-9]{3,}$",
+          "description": "The claim-id from the HTML comment in the outbound vendor packet. Must match exactly."
+        },
+        "field": {
+          "type": "string",
+          "description": "Schema field name (e.g., 'zoning_status') or descriptive label for fields that don't map to a single schema field (e.g., 'FEMA Flood Zone')."
+        },
+        "ai_finding": {
+          "type": "string",
+          "description": "The original AI finding, stripped of the 'AI found: ' prefix."
+        },
+        "ai_confidence": {
+          "type": "string",
+          "enum": ["B", "C"],
+          "description": "Original AI confidence level. Only B and C rows appear in verified_items — A-confidence rows do not require verification, D-confidence rows are task cards."
+        },
+        "cds_finding": {
+          "type": ["string", "null"],
+          "description": "CDS's exact language from the CDS Verified Finding column. Preserve verbatim — do not normalize or rewrite. Null if the CDS column was blank."
+        },
+        "cds_source": {
+          "type": ["string", "null"],
+          "description": "CDS's exact language from the CDS Source column. Preserve verbatim. Null if the CDS column was blank."
+        },
+        "cds_confidence": {
+          "type": ["string", "null"],
+          "enum": ["A", "B", null],
+          "description": "CDS's stated confidence level. CDS is expected to provide A (verified from authoritative source) or B (high-confidence from reliable source). Null if CDS left the column blank. CDS should never provide C or D — if they do, preserve as-is and flag in vendor_notes."
+        },
+        "status": {
+          "$ref": "#/definitions/VerificationStatus"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "NewFinding": {
+      "type": "object",
+      "required": ["field", "finding", "section"],
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "Best-fit schema field name, or 'narrative_note' if no schema field applies."
+        },
+        "finding": {
+          "type": "string",
+          "description": "CDS's exact language. Preserve verbatim."
+        },
+        "source": {
+          "type": ["string", "null"],
+          "description": "CDS's stated source for this finding. Null if not provided."
+        },
+        "section": {
+          "type": "string",
+          "description": "Which document section this appeared in (e.g., 'Section 3 — Corrections and Open Items', 'Additional table row — IBC Code Analysis', 'Vendor Sign-Off notes')."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "VerificationSummary": {
+      "type": "object",
+      "required": [
+        "total_bc_items",
+        "verified_count",
+        "confirmed_count",
+        "corrected_count",
+        "unverified_count",
+        "new_findings_count"
+      ],
+      "properties": {
+        "total_bc_items": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total B/C claim-ids in the outbound vendor packet. This is the denominator for all percentages."
+        },
+        "verified_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of items CDS addressed (confirmed + confirmed_unsourced + corrected + corrected_unsourced). Must equal confirmed_count + corrected_count."
+        },
+        "confirmed_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of items CDS confirmed (same value as AI). Includes confirmed + confirmed_unsourced."
+        },
+        "corrected_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of items CDS corrected (different value from AI). Includes corrected + corrected_unsourced."
+        },
+        "unverified_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of items CDS did not address. Must equal total_bc_items - verified_count."
+        },
+        "new_findings_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of findings CDS added outside the AI pre-report structure."
+        }
+      },
+      "additionalProperties": false
+    }
+
+  }
+}

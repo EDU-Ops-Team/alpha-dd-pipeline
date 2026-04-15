@@ -2,7 +2,7 @@
 
 ## Bottom Line
 
-The DD pipeline breaks into 14 work units. 7 are agent skills (Claude reads documents, reasons about data, writes structured output). 7 are scripts (deterministic Convex functions — no LLM needed). The split follows one rule: if the step requires reading unstructured text or making a judgment call, it's an agent. If it's moving data, calling an API with known inputs, or computing a diff, it's a script. All 7 agent skills live in the [Ops-Skills repo](https://github.com/EDU-Ops-Team/Ops-Skills).
+The DD pipeline breaks into 14 work units. 7 are agent skills (Claude reads documents, reasons about data, writes structured output). 7 are scripts (deterministic Convex functions — no LLM needed). The split follows one rule: if the step requires reading unstructured text or making a judgment call, it's an agent. If it's moving data, calling an API with known inputs, or computing a diff, it's a script. Pipeline-specific skills (WU-06, 07, 08, 12, 13) live in this repo under `skills/`. Standalone skills (ease-of-conversion, school-approval) live in [Ops-Skills](https://github.com/EDU-Ops-Team/Ops-Skills) and are referenced via submodule.
 
 ### Data model
 
@@ -31,7 +31,7 @@ The DD pipeline breaks into 14 work units. 7 are agent skills (Claude reads docu
 | 13 | DD Report Assembly | Agent | Minimum data threshold met | `dd_report` | Yes — report record |
 | 14 | Report Distribution | Script | WU-13 done | `distribution_log` | No — transient |
 
-**Totals: 7 agents, 7 scripts** — all agent skills in [Ops-Skills](https://github.com/EDU-Ops-Team/Ops-Skills)
+**Totals: 7 agents, 7 scripts** — 5 pipeline skills in-repo, 2 standalone via Ops-Skills submodule
 
 ---
 
@@ -683,7 +683,7 @@ Each agent runs as a Claude Managed Agent with a SKILL.md and supporting files.
 
 **Connectors:** Gmail, Google Drive
 
-**Skill:** `cds-verification-extraction/SKILL.md` (BUILT — in Ops-Skills)
+**Skill:** `skills/cds-verification-extraction/SKILL.md` (BUILT — in pipeline repo)
 
 **Sindri Data In:** `site_meta` (for site matching), `sir_ai` (for baseline comparison), `vendor_packets_sent` (for CDS report URL matching)
 
@@ -817,7 +817,7 @@ exact row matching.
 
 **Connectors:** Gmail, Google Drive
 
-**Skill:** `vendor-bi-extraction/SKILL.md` (BUILT — in Ops-Skills)
+**Skill:** `skills/vendor-bi-extraction/SKILL.md` (BUILT — in pipeline repo)
 
 **Sindri Data In:** `site_meta` (for site matching), `sir_ai` (for claim-id cross-reference)
 
@@ -1216,7 +1216,7 @@ checklist returned from the field into the standard inspection schema.
 
 **Connectors:** Google Docs (programmatic doc builder)
 
-**Skill:** `dd-report-assembly/SKILL.md` (BUILT — in Ops-Skills)
+**Skill:** `skills/dd-report-assembly/SKILL.md` (BUILT — in pipeline repo)
 
 **Sindri Data In:** ALL upstream work unit data:
 - `site_meta` (WU-01)
@@ -1305,28 +1305,28 @@ The agent reads structured data only — no raw PDFs.
 
 ## Skill Status
 
-All 7 agent skills live in the [Ops-Skills repo](https://github.com/EDU-Ops-Team/Ops-Skills). The pipeline repo references them via submodule.
+Pipeline-specific skills live in this repo under `skills/`. Standalone skills live in [Ops-Skills](https://github.com/EDU-Ops-Team/Ops-Skills) (submodule at `skills/ops-skills/`).
 
-| Skill | Ops-Skills Directory | Status | Validation Blocker |
+| Skill | Location | Status | Validation Blocker |
 |---|---|---|---|
-| `ease-of-conversion` | `ease-of-conversion/` | **BUILT** | None — tested on multiple addresses |
-| `school-approval` | `school-approval/` | **BUILT** | None — tested on multiple states |
-| `cds-verification-extraction` | `cds-verification-extraction/` | **BUILT** | Pending CDS vendor return sample for end-to-end validation |
-| `vendor-bi-extraction` | `vendor-bi-extraction/` | **BUILT** | Pending Worksmith return sample for end-to-end validation |
-| `isp-extraction` | `isp-extraction/` | **BUILT** | None — schema validated |
-| `opening-plan-v2` | `opening-plan-v2/` | **BUILT** (v2.2) | None — tested on Providence address |
-| `dd-report-assembly` | `dd-report-assembly/` | **BUILT** | Pending full pipeline run for integration validation |
+| `ease-of-conversion` | Ops-Skills (standalone) | **BUILT** | None — tested on multiple addresses |
+| `school-approval` | Ops-Skills (standalone) | **BUILT** | None — tested on multiple states |
+| `cds-verification-extraction` | Pipeline repo `skills/` | **BUILT** | Pending CDS vendor return sample for end-to-end validation |
+| `vendor-bi-extraction` | Pipeline repo `skills/` | **BUILT** | Pending Worksmith return sample for end-to-end validation |
+| `isp-extraction` | Pipeline repo `skills/` | **BUILT** | None — schema validated |
+| `opening-plan-v2` | Pipeline repo `skills/` | **BUILT** (v2.2) | None — tested on Providence address |
+| `dd-report-assembly` | Pipeline repo `skills/` | **BUILT** | Pending full pipeline run for integration validation |
 
 ---
 
 ## Shared Schemas
 
-The dual-column design depends on AI and vendor extractions using identical schemas. These schemas live alongside the skills in Ops-Skills:
+The dual-column design depends on AI and vendor extractions using identical schemas. These schemas live alongside their skills in the pipeline repo:
 
-| Schema | Location in Ops-Skills | Used By | Fields |
+| Schema | Location | Used By | Fields |
 |---|---|---|---|
-| `shared-sir-schema.json` | `cds-verification-extraction/references/` | WU-02 (sir_ai), WU-06 (sir_vendor), WU-09 (sir_delta) | zoning, authority chain, code framework, permit path, feasibility, environmental, infrastructure, verification metadata |
-| `shared-inspection-schema.json` | `vendor-bi-extraction/references/` | WU-07 (inspection_vendor), WU-09 (inspection_delta) | 11 sections (exterior/site through electrical) + deal-killer flags, occupant load, cost estimates, deficiency summary, specialist referrals, overall recommendation |
-| `isp-extraction-schema.json` | `isp-extraction/references/` | WU-08 (isp_extract) | building code info, executive summary, capacity analysis, classroom assignments, tier evaluation, ADA pre-check, IBC compliance (occupant load + plumbing), adjacency compliance, requirement status, optimization proposals, room schedule, door schedule |
+| `shared-sir-schema.json` | `skills/cds-verification-extraction/references/` | WU-02 (sir_ai), WU-06 (sir_vendor), WU-09 (sir_delta) | zoning, authority chain, code framework, permit path, feasibility, environmental, infrastructure, verification metadata |
+| `shared-inspection-schema.json` | `skills/vendor-bi-extraction/references/` | WU-07 (inspection_vendor), WU-09 (inspection_delta) | 11 sections (exterior/site through electrical) + deal-killer flags, occupant load, cost estimates, deficiency summary, specialist referrals, overall recommendation |
+| `isp-extraction-schema.json` | `skills/isp-extraction/references/` | WU-08 (isp_extract) | building code info, executive summary, capacity analysis, classroom assignments, tier evaluation, ADA pre-check, IBC compliance (occupant load + plumbing), adjacency compliance, requirement status, optimization proposals, room schedule, door schedule |
 
 The AI SIR (WU-02) doesn't directly use `shared-sir-schema.json` today — its output is defined by the ease-of-conversion skill. A mapping layer in WU-02 or a schema update to the skill will be needed to ensure the output conforms to the shared schema for delta computation.

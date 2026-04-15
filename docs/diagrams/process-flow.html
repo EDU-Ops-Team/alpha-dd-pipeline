@@ -714,7 +714,7 @@ const wuDetails = {
     deps: ['04'],
     downstream: ['09'],
     keyFields: ['verification_summary', 'verified_items[]', 'claim-id matching'],
-    skill: 'ops-skills/cds-verification-extraction'
+    skill: 'skills/cds-verification-extraction'
   },
   '07': {
     name: 'Vendor BI Extraction',
@@ -727,7 +727,7 @@ const wuDetails = {
     deps: ['04'],
     downstream: ['09'],
     keyFields: ['deal_killer_flags', '11 inspection sections', 'cost_estimates[]', 'deficiency_summary', 'site_specific_tasks[]'],
-    skill: 'ops-skills/vendor-bi-extraction'
+    skill: 'skills/vendor-bi-extraction'
   },
   '08': {
     name: 'ISP Extraction',
@@ -740,7 +740,7 @@ const wuDetails = {
     deps: [],
     downstream: ['10', '13'],
     keyFields: ['capacity_analysis', 'classroom_assignments[]', 'room_schedule[]', 'door_schedule[]', 'ada_pre_check'],
-    skill: 'ops-skills/isp-extraction'
+    skill: 'skills/isp-extraction'
   },
   '09': {
     name: 'Delta Computation',
@@ -788,7 +788,8 @@ const wuDetails = {
     connectors: ['Google Drive', 'Google Docs'],
     deps: ['02', '03', '10', '06', '07'],
     downstream: ['13'],
-    keyFields: ['recommendation', 'best_case_date', 'realistic_date', 'worst_case_date', 'gating_factors[]', 'research_enrichment_summary', 'hvac_ventilation_delta', 'hazmat_gate_status', 'edu_regulatory_archetype']
+    keyFields: ['recommendation', 'best_case_date', 'realistic_date', 'worst_case_date', 'gating_factors[]', 'research_enrichment_summary', 'hvac_ventilation_delta', 'hazmat_gate_status', 'edu_regulatory_archetype'],
+    skill: 'skills/opening-plan-v2'
   },
   '13': {
     name: 'DD Report Assembly',
@@ -801,7 +802,7 @@ const wuDetails = {
     deps: ['12', '09', '08', '03', '11'],
     downstream: ['14'],
     keyFields: ['report_url', 'can_we_open (yes/no)', 'recommended_path', 'total_cost_range'],
-    skill: 'ops-skills/dd-report-assembly'
+    skill: 'skills/dd-report-assembly'
   },
   '14': {
     name: 'Report Distribution',

@@ -1,0 +1,324 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ISP Extraction — Sindri Output (isp_extract)",
+  "description": "Structured extraction from a Program Fit Analysis PDF. All fields map to specific document sections as noted in SKILL.md.",
+  "type": "object",
+  "required": [
+    "extracted_at",
+    "source_doc_url",
+    "address",
+    "building_code_info",
+    "executive_summary",
+    "capacity_analysis",
+    "classroom_assignments",
+    "level_totals",
+    "tier_evaluation",
+    "ada_precheck",
+    "ibc_compliance",
+    "adjacency_compliance",
+    "requirement_status",
+    "room_schedule",
+    "door_schedule"
+  ],
+  "properties": {
+    "extracted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp of when extraction ran"
+    },
+    "source_doc_url": {
+      "type": "string",
+      "description": "Google Drive URL of the source ISP PDF"
+    },
+    "address": {
+      "type": "string",
+      "description": "Full street address from the document header"
+    },
+    "building_code_info": {
+      "type": "object",
+      "required": ["building_code", "occupancy_classification", "jurisdiction", "sprinkler_system", "total_occupant_load", "gross_floor_area_sf"],
+      "properties": {
+        "building_code": { "type": "string", "description": "e.g., 'IBC 2018'" },
+        "occupancy_classification": { "type": "string", "description": "e.g., 'Group E (Educational)'" },
+        "jurisdiction": { "type": "string", "description": "e.g., 'OK:Oklahoma'" },
+        "amendments": { "type": ["string", "null"], "description": "Full amendments text or null" },
+        "sprinkler_system": { "type": "boolean" },
+        "total_occupant_load": { "type": "integer" },
+        "gross_floor_area_sf": { "type": "integer" }
+      }
+    },
+    "executive_summary": {
+      "type": "object",
+      "required": ["program_fit_score", "program_fit_rating", "requirements_met", "recommended_capacity"],
+      "properties": {
+        "program_fit_score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "program_fit_rating": { "type": "string", "enum": ["GOOD FIT", "MARGINAL FIT", "POOR FIT"] },
+        "requirements_met": { "type": "string", "description": "e.g., '9/9'" },
+        "requirements_score": { "type": ["string", "null"], "description": "e.g., '60/60'" },
+        "quality_score": { "type": ["string", "null"], "description": "e.g., '38/40'" },
+        "total_rooms": { "type": "integer" },
+        "rooms_assigned": { "type": "integer" },
+        "rooms_unassigned": { "type": "integer" },
+        "target_capacity": { "type": ["integer", "null"], "description": "null if 'N/A'" },
+        "recommended_capacity": { "type": "integer", "description": "Recommended student capacity" },
+        "avg_fit_score_pct": { "type": "number", "description": "e.g., 89.3" },
+        "best_tier_met": { "type": "string", "description": "e.g., 'ideal', 'absolute_min'" }
+      }
+    },
+    "capacity_analysis": {
+      "type": "object",
+      "required": ["grade_span", "guides_required", "recommended_capacity"],
+      "properties": {
+        "grade_span": { "type": "string", "description": "e.g., 'Grades K-1, 2-3, 4-5, 6-8'" },
+        "guides_required": { "type": "integer" },
+        "recommended_capacity": { "type": "integer" },
+        "gross_ceiling_capacity": { "type": ["integer", "null"] },
+        "nla_capacity": { "type": ["integer", "null"] },
+        "effective_sf_per_student": { "type": ["integer", "null"] },
+        "sharing_penalty": { "type": "string", "description": "'None' or description of penalty" },
+        "space_requirements": {
+          "type": "object",
+          "properties": {
+            "workshop": { "type": "string", "enum": ["Met", "Not Met"] },
+            "one_on_one_meeting": { "type": "string", "enum": ["Met", "Not Met"] },
+            "play_area": { "type": "string", "enum": ["Met", "Not Met"] },
+            "dining_commons": { "type": "string", "enum": ["Met", "Not Met"] }
+          }
+        }
+      }
+    },
+    "classroom_assignments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["room_id", "level", "students", "area_sf"],
+        "properties": {
+          "room_id": { "type": "string" },
+          "level": { "type": "string", "description": "e.g., 'K-1', '2-3', '4-5', '6-8'" },
+          "students": { "type": "integer" },
+          "area_sf": { "type": "integer" }
+        }
+      }
+    },
+    "level_totals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["level", "room_count", "total_students"],
+        "properties": {
+          "level": { "type": "string" },
+          "room_count": { "type": "integer" },
+          "total_students": { "type": "integer" }
+        }
+      }
+    },
+    "tier_evaluation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tier", "meets"],
+        "properties": {
+          "tier": { "type": "string" },
+          "meets": { "type": "boolean" },
+          "required_met": { "type": ["string", "null"] },
+          "assignment_pct": { "type": ["number", "null"] },
+          "fit_pct": { "type": ["number", "null"] },
+          "missing": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "ada_precheck": {
+      "type": "object",
+      "required": ["score", "errors", "warnings"],
+      "properties": {
+        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "errors": { "type": "integer" },
+        "warnings": { "type": "integer" },
+        "violations_by_rule": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["rule", "count", "severity_breakdown"],
+            "properties": {
+              "rule": { "type": "string" },
+              "count": { "type": "integer" },
+              "severity_breakdown": { "type": "string" }
+            }
+          }
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["severity", "location", "rule", "description"],
+            "properties": {
+              "severity": { "type": "string", "enum": ["ERROR", "WARNING"] },
+              "location": { "type": "string", "description": "Door ID (e.g., 'D5') or room ID (e.g., 'R12') or internal ID if no human-readable ID available" },
+              "rule": { "type": "string" },
+              "actual": { "type": ["string", "null"] },
+              "required": { "type": ["string", "null"] },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "ibc_compliance": {
+      "type": "object",
+      "required": ["score", "errors", "warnings", "total_occupant_load"],
+      "properties": {
+        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "errors": { "type": "integer" },
+        "warnings": { "type": "integer" },
+        "total_occupant_load": { "type": "integer" },
+        "occupant_load_by_room": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["room_id", "type", "area_sf", "factor", "method", "load"],
+            "properties": {
+              "room_id": { "type": "string" },
+              "type": { "type": "string" },
+              "area_sf": { "type": "integer" },
+              "factor": { "type": "integer" },
+              "method": { "type": "string", "enum": ["net", "gross"] },
+              "load": { "type": "integer" }
+            }
+          }
+        },
+        "plumbing_fixtures": {
+          "type": "object",
+          "properties": {
+            "water_closets_male": {
+              "type": "object",
+              "properties": {
+                "required": { "type": "integer" },
+                "notes": { "type": "string" }
+              }
+            },
+            "water_closets_female": {
+              "type": "object",
+              "properties": {
+                "required": { "type": "integer" },
+                "notes": { "type": "string" }
+              }
+            },
+            "lavatories": {
+              "type": "object",
+              "properties": {
+                "required": { "type": "integer" },
+                "notes": { "type": "string" }
+              }
+            },
+            "drinking_fountains": {
+              "type": "object",
+              "properties": {
+                "required": { "type": "integer" },
+                "notes": { "type": "string" }
+              }
+            }
+          }
+        },
+        "plumbing_summary": { "type": ["string", "null"] },
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["severity", "rule", "description"],
+            "properties": {
+              "severity": { "type": "string", "enum": ["ERROR", "WARNING", "INFO"] },
+              "rule": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "adjacency_compliance": {
+      "type": "object",
+      "required": ["score", "critical_count", "high_count", "medium_count"],
+      "properties": {
+        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "critical_count": { "type": "integer" },
+        "high_count": { "type": "integer" },
+        "medium_count": { "type": "integer" },
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["priority", "rule_number", "room_types", "relationship", "detail"],
+            "properties": {
+              "priority": { "type": "string", "enum": ["Critical", "High", "Medium", "Low"] },
+              "rule_number": { "type": "integer" },
+              "room_types": { "type": "string" },
+              "relationship": { "type": "string" },
+              "detail": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "requirement_status": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["room_type", "required", "assigned", "status"],
+        "properties": {
+          "room_type": { "type": "string" },
+          "required": { "type": "string", "description": "e.g., '4+ (required)', '0+ (optional)'" },
+          "assigned": { "type": "integer" },
+          "status": { "type": "string", "enum": ["Met", "Not Met"] }
+        }
+      }
+    },
+    "optimization_proposals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "action", "rooms"],
+        "properties": {
+          "number": { "type": "integer" },
+          "action": { "type": "string", "description": "e.g., 'SWAP', 'MOVE'" },
+          "rooms": { "type": "string", "description": "e.g., 'R2 + R1-S4'" },
+          "result_type": { "type": ["string", "null"] },
+          "result_sf": { "type": ["integer", "null"] },
+          "reason": { "type": "string" },
+          "priority": { "type": "string" },
+          "fit_delta": { "type": "number" }
+        }
+      }
+    },
+    "room_schedule": {
+      "type": "array",
+      "description": "Complete room inventory — source of truth for all room data",
+      "items": {
+        "type": "object",
+        "required": ["room_id", "floor", "assignment", "area_sf"],
+        "properties": {
+          "room_id": { "type": "string" },
+          "floor": { "type": "string", "description": "e.g., 'Floor 1', 'Floor 2'" },
+          "assignment": { "type": "string", "description": "e.g., 'CLASSROOM', 'DINING', 'CORRIDOR'" },
+          "area_sf": { "type": "integer" },
+          "dimensions": { "type": ["string", "null"], "description": "e.g., '10 x 53'" },
+          "occupant_load": { "type": ["integer", "null"], "description": "null for restrooms, corridors, etc." },
+          "fit_score_pct": { "type": ["integer", "null"] }
+        }
+      }
+    },
+    "door_schedule": {
+      "type": "array",
+      "description": "Complete door inventory with ADA/code violation notes",
+      "items": {
+        "type": "object",
+        "required": ["door_id", "floor", "width_in", "height_in"],
+        "properties": {
+          "door_id": { "type": "string" },
+          "floor": { "type": "string" },
+          "width_in": { "type": "number" },
+          "height_in": { "type": "number" },
+          "notes": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}
