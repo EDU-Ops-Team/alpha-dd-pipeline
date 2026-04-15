@@ -27,7 +27,7 @@ The DD pipeline breaks into 14 work units. 5 are agent skills (Claude reads docu
 | 09 | Delta Computation | Script | WU-06 or WU-07 done | `sir_delta`, `inspection_delta` | Optional — QA metric |
 | 10 | RayCon Cost Estimates | Script | ISP + inspection ready | `cost_estimates` | Yes — cost data |
 | 11 | Shovels Permit History | Script | WU-01 done | `permit_history` | Yes — permit data |
-| 12 | Opening Plan | Agent | SIR + inspection + costs ready | `opening_plan` | Yes — decision doc |
+| 12 | Opening Plan v2 | Agent | SIR + school-approval + inspection + costs ready | `opening_plan` | Yes — decision doc |
 | 13 | DD Report Assembly | Agent | Minimum data threshold met | `dd_report` | Yes — report record |
 | 14 | Report Distribution | Script | WU-13 done | `distribution_log` | No — transient |
 
@@ -44,9 +44,10 @@ The DD pipeline breaks into 14 work units. 5 are agent skills (Claude reads docu
               WU-02    WU-03   WU-05   WU-11
               Agent    Agent   Script  Script
           (AI SIR)  (School) (Slides) (Shovels)
-              |
-          WU-04 (Vendor Dispatch) ─── Script
-              |
+              |         |
+          WU-04 ───    |  WU-03 feeds WU-12 (school-approval → edu regulatory baseline)
+          Script       |
+              |        |
      ┌────── ↓ ──────── Vendor returns arrive (async, days/weeks later)
      |                          |                    |
   WU-06                     WU-07                 WU-08
@@ -59,7 +60,8 @@ The DD pipeline breaks into 14 work units. 5 are agent skills (Claude reads docu
                                 |
                     WU-10 (RayCon) ─── Script
                                 |
-                    WU-12 (Opening Plan) ─── Agent
+                    WU-12 (Opening Plan v2) ─── Agent
+                      deps: WU-02, WU-03, WU-10, WU-06, WU-07
                                 |
                     WU-13 (DD Report) ─── Agent
                                 |
@@ -1092,27 +1094,33 @@ checklist returned from the field into the standard inspection schema.
 
 ---
 
-### AGENT-12: Opening Plan Generation
+### AGENT-12: Opening Plan v2
 
-**Purpose:** Synthesize SIR, inspection, cost, permit, and school approval data into a scenario-based Opening Plan (Permitting Plan) with timelines, gating factors, and risk analysis.
+**Purpose:** Two-pass permitting plan generation. Pass 1 builds a deterministic SIR baseline with mandatory ASHRAE 62.1 HVAC calculation, AHERA hazmat gating (pre-1978 buildings), and ADA elevator determination. Pass 2 launches 5 parallel research agents (Zoning, Building, Health/Edu Regulatory, Fire, ADA/HVAC) to enrich the baseline with primary-source citations, named contacts, and cunning-path strategies. Agent 3 (Health/Edu Regulatory) receives `school_approval` output (WU-03) as its education regulatory baseline — 15 fields are PRE-ENRICHED so the agent deepens rather than rediscovers. Output is a Google Doc from the master template.
 
-**Invoking Event:** Readiness check — best available SIR + inspection + `cost_estimates` all exist in Sindri
+**Invoking Event:** Readiness check — best available SIR + `school_approval` + inspection + `cost_estimates` all exist in Sindri
 
-**Subs to Monitor:** Sindri — compound watch on SIR + inspection + cost_estimates
+**Subs to Monitor:** Sindri — compound watch on SIR + school_approval + inspection + cost_estimates
 
-**Connectors:** Google Drive
+**Connectors:** Google Drive, Google Docs
 
-**Skill:** `sir-to-permitting-plan/SKILL.md`
-- Existing skill in Ops-Skills repo
-- 8-step conversion process, 12 hard rules
-- Produces 3 scenarios (best/realistic/worst), gating factors, per-track risk analysis
+**Skill:** `opening-plan-v2/SKILL.md` (v2.2)
+- Replaces `sir-to-permitting-plan`
+- Two-pass architecture: SIR baseline (deterministic) + 5 parallel research agents (aspirational)
+- Mandatory Pass 1 calculations: HVAC ventilation delta (ASHRAE 62.1), elevator requirement (ADA §206.2.3), AHERA hazmat gate (pre-1978)
+- Research agents: Zoning & Land Use, Building Code, Health/Food/Edu Regulatory, Fire Code & Life Safety, ADA/HVAC & Accessibility
+- Agent 3 consumes `school_approval` (WU-03) as PRE-ENRICHED baseline for education regulatory fields
+- Mandatory research checks: state sprinkler threshold amendment, NFPA 101 cross-check, conflicting standards resolution protocol, attorney verification
+- Depends on `school-approval` skill (user scope) as a pre-step
+- 18 hard rules, 3 executive checklists (Andy, Neeraj, JC)
 
 **Sindri Data In:**
+- `sir_ai` (from WU-02) — required for Pass 1 baseline
 - Best available SIR: `sir_vendor` preferred, `sir_ai` fallback
 - Best available inspection: `inspection_vendor` preferred, `inspection_ai` fallback
 - `cost_estimates` (from WU-10)
 - `permit_history` (from WU-11)
-- `school_approval` (from WU-03)
+- `school_approval` (from WU-03) — **new dependency**: pre-enriches 15 edu regulatory fields for Agent 3
 - `sir_delta` or `inspection_delta` (from WU-09, if available — highlights conflicts)
 - `site_meta` (from WU-01)
 
@@ -1121,6 +1129,7 @@ checklist returned from the field into the standard inspection schema.
 {
   "opening_plan": {
     "generated_at": "ISO timestamp",
+    "skill_version": "2.2",
     "recommendation": "Go | No Go | Conditional Go",
     "scenarios": {
       "best": { "target_date": "string", "total_cost": "integer", "weeks": "integer" },
@@ -1129,13 +1138,43 @@ checklist returned from the field into the standard inspection schema.
     },
     "gating_factors": [
       {
-        "gate_id": "string",
+        "gate_id": "string — e.g. gate_0, gate_0hm, gate_1",
         "name": "string",
+        "gate_type": "site_kill | hazmat | timeline_branch | scope_unknown | permit_cycle",
         "resolved_when": "string",
         "good_outcome": "string",
         "bad_outcome": "string"
       }
     ],
+    "deterministic_calculations": {
+      "hvac_ventilation_delta": {
+        "existing_cfm": "integer",
+        "required_cfm": "integer",
+        "multiplier": "float",
+        "estimated_cost_low": "integer",
+        "estimated_cost_high": "integer"
+      },
+      "elevator_required": "boolean",
+      "hazmat_gate": {
+        "applicable": "boolean — true if pre-1978",
+        "estimated_weeks": "integer — 6-8 if applicable"
+      }
+    },
+    "research_enrichment_summary": {
+      "fields_enriched": "integer",
+      "sir_confirmed": "integer",
+      "sir_contradicted": "integer",
+      "sir_gaps_filled": "integer",
+      "named_contacts_found": "integer",
+      "conflicting_standards": ["string — if any"]
+    },
+    "edu_regulatory": {
+      "archetype": "string — from school-approval",
+      "gating_before_open": "boolean",
+      "calendar_window": "string | null",
+      "equivalency_pathways": ["string — from Agent 3 research"],
+      "denial_precedents": ["string — from Agent 3 research"]
+    },
     "risks": [
       {
         "track": "string",
@@ -1145,10 +1184,11 @@ checklist returned from the field into the standard inspection schema.
         "mitigations": ["string"]
       }
     ],
-    "report_url": "string — Drive URL of the full Opening Plan document",
+    "report_url": "string — Drive URL of the full Opening Plan Google Doc",
     "data_sources_used": {
       "sir_source": "vendor | ai",
-      "inspection_source": "vendor | ai"
+      "inspection_source": "vendor | ai",
+      "school_approval_used": "boolean"
     }
   }
 }
@@ -1157,8 +1197,10 @@ checklist returned from the field into the standard inspection schema.
 **RHODES Write:** Yes — the Opening Plan is a decision document used by leadership and construction.
 
 **Supporting Files:**
-- `SKILL.md` — full skill definition (exists)
-- `references/permitting-plan-template.md` — the output template
+- `SKILL.md` — full skill definition (v2.2)
+- `references/field-mapping.md` — SIR-to-plan field mapping with PRE-ENRICHED type, scenario derivation logic, ENRICH protocol
+- `references/template-content.md` — full section-by-section template hierarchy
+- `references/executive-mindset.md` — Andy/Neeraj/JC evaluation standards
 
 ---
 

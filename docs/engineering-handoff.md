@@ -36,7 +36,7 @@ alpha-site-pipeline/
 │   ├── wrike_provider.py    # Wrike API client (migration fallback)
 │   ├── google_client.py     # Unified Google APIs
 │   ├── extractors/          # One per document type (SIR, BI, ISP)
-│   ├── enrichment/          # RayCon, Shovels, Opening Plan
+│   ├── enrichment/          # RayCon, Shovels, Opening Plan v2
 │   └── schema.py            # Site data record schema + DD report tokens
 │
 ├── services/                # Thin MCP wrappers (tool definitions only)
@@ -46,7 +46,8 @@ alpha-site-pipeline/
 │
 ├── skills/                  # Git submodule → EDU-Ops-Team/Ops-Skills
 │   ├── ease-of-conversion/
-│   └── school-approval/
+│   ├── school-approval/
+│   └── opening-plan-v2/     # Replaces sir-to-permitting-plan
 │
 └── tests/
 ```

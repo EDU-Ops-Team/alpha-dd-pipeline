@@ -457,7 +457,7 @@
           <div class="wu-rhodes yes">RHODES</div>
         </div>
 
-        <div class="wu-node agent" data-wu="03" data-deps="01" data-downstream="13">
+        <div class="wu-node agent" data-wu="03" data-deps="01" data-downstream="12,13">
           <div class="wu-header">
             <span class="wu-number">WU-03</span>
             <span class="wu-type">Agent</span>
@@ -585,14 +585,14 @@
     <div class="phase-lane">
       <div class="phase-label">Phase 6 — Plan + Report Assembly</div>
       <div class="phase-row">
-        <div class="wu-node agent" data-wu="12" data-deps="10,06,07" data-downstream="13">
+        <div class="wu-node agent" data-wu="12" data-deps="02,03,10,06,07" data-downstream="13">
           <div class="wu-header">
             <span class="wu-number">WU-12</span>
             <span class="wu-type">Agent</span>
           </div>
-          <div class="wu-name">Opening Plan</div>
+          <div class="wu-name">Opening Plan v2</div>
           <div class="wu-data">Sindri: <code>opening_plan</code></div>
-          <div class="wu-trigger">Reads: SIR + inspection + costs</div>
+          <div class="wu-trigger">Reads: SIR + school-approval + inspection + costs</div>
           <div class="wu-rhodes yes">RHODES</div>
         </div>
 
@@ -670,14 +670,14 @@ const wuDetails = {
   '03': {
     name: 'School Approval',
     type: 'agent',
-    purpose: 'Score the address for education approval difficulty. Rates how hard it is to legally operate a private K-8 school by state.',
+    purpose: 'Score the address for education approval difficulty. Rates how hard it is to legally operate a private K-8 school by state. Output feeds both the Opening Plan (WU-12, as pre-enriched edu regulatory baseline) and the DD Report (WU-13).',
     trigger: 'WU-01 complete (site_meta exists)',
     sindriOut: 'school_approval',
     rhodesWrite: 'Yes — regulatory record',
     connectors: [],
     deps: ['01'],
-    downstream: ['13'],
-    keyFields: ['approval_difficulty', 'state_rating', 'regulatory_requirements']
+    downstream: ['12', '13'],
+    keyFields: ['approval_difficulty', 'state_rating', 'regulatory_requirements', 'archetype', 'gating_before_open', 'calendar_window', 'ease_score_0_10']
   },
   '04': {
     name: 'Vendor Dispatch (CDS + Worksmith)',
@@ -776,16 +776,16 @@ const wuDetails = {
     keyFields: ['permits[]', 'total_construction_value', 'most_recent_permit']
   },
   '12': {
-    name: 'Opening Plan',
+    name: 'Opening Plan v2',
     type: 'agent',
-    purpose: 'Convert SIR + inspection + cost data into a Permitting Plan with 3 scenarios (best/realistic/worst), gating factors, and cited risk analysis.',
-    trigger: 'SIR + inspection + costs all ready',
+    purpose: 'Two-pass permitting plan. Pass 1: deterministic SIR baseline with ASHRAE 62.1 HVAC calculation, AHERA hazmat gating (pre-1978), and ADA elevator determination. Pass 2: 5 parallel research agents (Zoning, Building, Health/Edu Regulatory, Fire, ADA/HVAC) enrich the baseline with primary-source citations, named contacts, and cunning-path strategies. Agent 3 receives school-approval output (WU-03) as its education regulatory baseline — state archetype, gating requirements, and calendar windows are pre-confirmed. Output is a Google Doc from the master template.',
+    trigger: 'SIR + school-approval + inspection + costs all ready',
     sindriOut: 'opening_plan',
     rhodesWrite: 'Yes — decision doc',
-    connectors: ['Google Drive'],
-    deps: ['10', '06', '07'],
+    connectors: ['Google Drive', 'Google Docs'],
+    deps: ['02', '03', '10', '06', '07'],
     downstream: ['13'],
-    keyFields: ['recommendation', 'best_case_date', 'realistic_date', 'worst_case_date', 'gating_factors[]']
+    keyFields: ['recommendation', 'best_case_date', 'realistic_date', 'worst_case_date', 'gating_factors[]', 'research_enrichment_summary', 'hvac_ventilation_delta', 'hazmat_gate_status', 'edu_regulatory_archetype']
   },
   '13': {
     name: 'DD Report Assembly',

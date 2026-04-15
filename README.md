@@ -22,7 +22,7 @@ WU-01 (Intake) ─── Script
           │
        WU-09 (Delta Computation) ─── Script
        WU-10 (RayCon Cost Estimates) ─── Script
-       WU-12 (Opening Plan) ─── Agent [ops-skills/sir-to-permitting-plan]
+       WU-12 (Opening Plan v2) ─── Agent [ops-skills/opening-plan-v2]
        WU-13 (DD Report Assembly) ─── Agent [dd-report-assembly]
        WU-14 (Report Distribution) ─── Script
 ```
@@ -46,7 +46,7 @@ alpha-dd-pipeline/
 │   └── ops-skills/             # Submodule → EDU-Ops-Team/Ops-Skills
 │       ├── ease-of-conversion/ # AGENT-02: AI SIR Generation
 │       ├── school-approval/    # AGENT-03: School Approval Analysis
-│       └── sir-to-permitting-plan/ # AGENT-12: Opening Plan Generation
+│       └── opening-plan-v2/       # AGENT-12: Opening Plan v2 (two-pass: SIR baseline + research enrichment)
 ├── scripts/                    # WU-01, 04, 05, 09, 10, 11, 14 (TypeScript logic)
 ├── docs/
 │   ├── sindri-work-unit-decomposition.md  # Full WU specs
@@ -61,7 +61,8 @@ alpha-dd-pipeline/
 - **Recommended Path inferred** — capacity-per-dollar ratio among scenarios that can complete before Aug 12, 2026
 - **No fabricated timelines** — dates come from the Opening Plan; missing data gets a gap label saying what's needed
 - **Human-readable output** — every support document must produce both structured JSON (Sindri) and a readable document (Drive)
-- **Ops-Skills as submodule** — shared team repo, one source of truth for ease-of-conversion and school-approval
+- **School-approval feeds Opening Plan** — WU-03 output is pre-enriched input for WU-12's education regulatory section (Agent 3 deepens, doesn't rediscover)
+- **Ops-Skills as submodule** — shared team repo, one source of truth for ease-of-conversion, school-approval, and opening-plan-v2
 
 ## Getting Started
 
