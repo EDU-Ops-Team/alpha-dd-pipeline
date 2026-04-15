@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DD Pipeline — Process Flow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root, [data-theme="light"] {
+      --bg: #f7f6f2;
+      --surface: #ffffff;
+      --surface-2: #f3f0ec;
+      --border: #d4d1ca;
+      --divider: #e6e4df;
+      --text: #28251d;
+      --text-muted: #7a7974;
+      --text-faint: #bab9b4;
+      --agent: #01696f;
+      --agent-bg: #e8f4f5;
+      --agent-border: #b0d8db;
+      --script: #964219;
+      --script-bg: #faf0e8;
+      --script-border: #dfc4ad;
+      --external: #7a39bb;
+      --external-bg: #f3ecfa;
+      --external-border: #c9b3e0;
+      --data-flow: #006494;
+      --highlight: #01696f;
+      --highlight-bg: rgba(1, 105, 111, 0.08);
+      --shadow-sm: 0 1px 3px rgba(40, 37, 29, 0.06);
+      --shadow-md: 0 4px 12px rgba(40, 37, 29, 0.08);
+      --shadow-lg: 0 8px 24px rgba(40, 37, 29, 0.12);
+      --radius: 10px;
+      --radius-sm: 6px;
+      --transition: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    [data-theme="dark"] {
+      --bg: #141312;
+      --surface: #1e1d1b;
+      --surface-2: #262523;
+      --border: #393836;
+      --divider: #2d2c2a;
+      --text: #cdccca;
+      --text-muted: #797876;
+      --text-faint: #5a5957;
+      --agent: #4f98a3;
+      --agent-bg: #1a2e30;
+      --agent-border: #2a4a4e;
+      --script: #bb653b;
+      --script-bg: #2a1f17;
+      --script-border: #4a3325;
+      --external: #a86fdf;
+      --external-bg: #231a2e;
+      --external-border: #3d2a55;
+      --data-flow: #5591c7;
+      --highlight: #4f98a3;
+      --highlight-bg: rgba(79, 152, 163, 0.1);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+      --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.5;
+      min-height: 100dvh;
+    }
+
+    /* HEADER */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg);
+      border-bottom: 1px solid var(--divider);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(12px);
+    }
+    .header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .legend {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .legend-dot {
+      width: 10px; height: 10px; border-radius: 3px;
+    }
+    .legend-dot.agent { background: var(--agent); }
+    .legend-dot.script { background: var(--script); }
+    .legend-dot.external { background: var(--external); }
+
+    .theme-toggle {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text-muted);
+      transition: all var(--transition);
+    }
+    .theme-toggle:hover { background: var(--surface-2); color: var(--text); }
+
+    /* MAIN CANVAS */
+    .canvas-wrap {
+      width: 100%;
+      overflow-x: auto;
+      padding: 40px 32px 60px;
+    }
+    .canvas {
+      position: relative;
+      min-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* SVG CONNECTIONS */
+    .connections {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .connections path {
+      fill: none;
+      stroke: var(--border);
+      stroke-width: 1.5;
+      stroke-dasharray: 4 3;
+      transition: stroke 0.3s, stroke-width 0.3s;
+    }
+    .connections path.highlighted {
+      stroke: var(--highlight);
+      stroke-width: 2.5;
+      stroke-dasharray: none;
+    }
+    .connections path.dimmed { opacity: 0.15; }
+
+    /* PHASE LANES */
+    .phase-lane {
+      position: relative;
+      z-index: 1;
+      margin-bottom: 20px;
+    }
+    .phase-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-faint);
+      margin-bottom: 12px;
+      padding-left: 4px;
+    }
+    .phase-row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    /* ASYNC DIVIDER */
+    .async-divider {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 28px 0;
+      padding: 0 4px;
+    }
+    .async-divider::before, .async-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: repeating-linear-gradient(
+        90deg,
+        var(--text-faint) 0,
+        var(--text-faint) 4px,
+        transparent 4px,
+        transparent 8px
+      );
+    }
+    .async-divider span {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-faint);
+      white-space: nowrap;
+    }
+
+    /* WORK UNIT NODES */
+    .wu-node {
+      position: relative;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      min-width: 200px;
+      max-width: 260px;
+      flex: 1;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: all var(--transition);
+    }
+    .wu-node:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+    .wu-node.active {
+      border-color: var(--highlight);
+      box-shadow: 0 0 0 3px var(--highlight-bg), var(--shadow-md);
+    }
+    .wu-node.dimmed { opacity: 0.3; }
+
+    .wu-node.agent { border-left: 4px solid var(--agent); }
+    .wu-node.script { border-left: 4px solid var(--script); }
+    .wu-node.external { border-left: 4px solid var(--external); }
+
+    .wu-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .wu-number {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .wu-node.agent .wu-number { background: var(--agent-bg); color: var(--agent); }
+    .wu-node.script .wu-number { background: var(--script-bg); color: var(--script); }
+    .wu-node.external .wu-number { background: var(--external-bg); color: var(--external); }
+
+    .wu-type {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-faint);
+    }
+    .wu-name {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.3;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+    .wu-data {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+    .wu-data code {
+      background: var(--surface-2);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 10.5px;
+    }
+    .wu-trigger {
+      font-size: 11px;
+      color: var(--text-faint);
+      margin-top: 4px;
+    }
+    .wu-rhodes {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-top: 6px;
+    }
+    .wu-rhodes.yes { background: var(--agent-bg); color: var(--agent); }
+    .wu-rhodes.no { background: var(--surface-2); color: var(--text-faint); }
+
+    /* DETAIL PANEL */
+    .detail-panel {
+      position: fixed;
+      top: 0;
+      right: -420px;
+      width: 400px;
+      height: 100vh;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      z-index: 200;
+      transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .detail-panel.open { right: 0; }
+    .detail-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text-muted);
+      font-size: 16px;
+      transition: all var(--transition);
+    }
+    .detail-close:hover { background: var(--surface-2); color: var(--text); }
+    .detail-panel h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      padding-right: 40px;
+    }
+    .detail-panel .detail-type {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 16px;
+    }
+    .detail-panel .detail-type.agent { color: var(--agent); }
+    .detail-panel .detail-type.script { color: var(--script); }
+    .detail-section {
+      margin-bottom: 16px;
+    }
+    .detail-section h3 {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-faint);
+      margin-bottom: 6px;
+    }
+    .detail-section p, .detail-section li {
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text-muted);
+    }
+    .detail-section ul { padding-left: 16px; }
+    .detail-section li { margin-bottom: 4px; }
+    .detail-section code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      background: var(--surface-2);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+    .detail-deps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .detail-dep-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--surface-2);
+      color: var(--text-muted);
+      cursor: pointer;
+      border: 1px solid var(--divider);
+      transition: all var(--transition);
+    }
+    .detail-dep-tag:hover {
+      background: var(--highlight-bg);
+      border-color: var(--highlight);
+      color: var(--highlight);
+    }
+
+    /* OVERLAY */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.2);
+      z-index: 150;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .overlay.open { opacity: 1; pointer-events: auto; }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .header { padding: 12px 16px; }
+      .legend { display: none; }
+      .canvas-wrap { padding: 24px 16px 40px; }
+      .detail-panel { width: 100%; right: -100%; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <h1>DD Pipeline — Process Flow</h1>
+  <div class="header-right">
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot agent"></div>Agent (LLM)</div>
+      <div class="legend-item"><div class="legend-dot script"></div>Script (Deterministic)</div>
+      <div class="legend-item"><div class="legend-dot external"></div>External Event</div>
+    </div>
+    <button class="theme-toggle" data-theme-toggle aria-label="Switch to dark mode">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="canvas-wrap">
+  <div class="canvas" id="canvas">
+
+    <!-- PHASE 1: INTAKE -->
+    <div class="phase-lane">
+      <div class="phase-label">Phase 1 — Intake</div>
+      <div class="phase-row">
+        <div class="wu-node script" data-wu="01" data-deps="" data-downstream="02,03,05,11">
+          <div class="wu-header">
+            <span class="wu-number">WU-01</span>
+            <span class="wu-type">Script</span>
+          </div>
+          <div class="wu-name">New Site Intake</div>
+          <div class="wu-data">Sindri: <code>site_meta</code></div>
+          <div class="wu-trigger">Trigger: New Site email (LOI)</div>
+          <div class="wu-rhodes yes">RHODES</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PHASE 2: PARALLEL RESEARCH -->
+    <div class="phase-lane">
+      <div class="phase-label">Phase 2 — Parallel Research (all triggered by WU-01)</div>
+      <div class="phase-row">
+        <div class="wu-node agent" data-wu="02" data-deps="01" data-downstream="04">
+          <div class="wu-header">
+            <span class="wu-number">WU-02</span>
+            <span class="wu-type">Agent</span>
+          </div>
+          <div class="wu-name">AI SIR Generation</div>
+          <div class="wu-data">Sindri: <code>sir_ai</code></div>
+          <div class="wu-trigger">Reads: <code>site_meta</code></div>
+          <div class="wu-rhodes yes">RHODES</div>
+        </div>
+
+        <div class="wu-node agent" data-wu="03" data-deps="01" data-downstream="13">
+          <div class="wu-header">
+            <span class="wu-number">WU-03</span>
+            <span class="wu-type">Agent</span>
+          </div>
+          <div class="wu-name">School Approval</div>
+          <div class="wu-data">Sindri: <code>school_approval</code></div>
+          <div class="wu-trigger">Reads: <code>site_meta</code></div>
+          <div class="wu-rhodes yes">RHODES</div>
+        </div>
+
+        <div class="wu-node script" data-wu="05" data-deps="01" data-downstream="">
+          <div class="wu-header">
+            <span class="wu-number">WU-05</span>
+            <span class="wu-type">Script</span>
+          </div>
+          <div class="wu-name">Location Presentation</div>
+          <div class="wu-data">Sindri: <code>presentation_url</code></div>
+          <div class="wu-trigger">Reads: <code>site_meta</code></div>
+          <div class="wu-rhodes no">No RHODES</div>
+        </div>
+
+        <div class="wu-node script" data-wu="11" data-deps="01" data-downstream="13">
+          <div class="wu-header">
+            <span class="wu-number">WU-11</span>
+            <span class="wu-type">Script</span>
+          </div>
+          <div class="wu-name">Shovels Permit History</div>
+          <div class="wu-data">Sindri: <code>permit_history</code></div>
+          <div class="wu-trigger">Reads: <code>site_meta</code></div>
+          <div class="wu-rhodes yes">RHODES</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PHASE 3: VENDOR DISPATCH -->
+    <div class="phase-lane">
+      <div class="phase-label">Phase 3 — Vendor Dispatch</div>
+      <div class="phase-row">
+        <div class="wu-node script" data-wu="04" data-deps="02" data-downstream="06,07">
+          <div class="wu-header">
+            <span class="wu-number">WU-04</span>
+            <span class="wu-type">Script</span>
+          </div>
+          <div class="wu-name">Vendor Dispatch (CDS + Worksmith)</div>
+          <div class="wu-data">Sindri: <code>vendor_packets_sent</code></div>
+          <div class="wu-trigger">Reads: <code>sir_ai</code> + <code>site_meta</code></div>
+          <div class="wu-rhodes no">No RHODES</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ASYNC DIVIDER -->
+    <div class="async-divider">
+      <span>Vendor returns arrive async (days / weeks)</span>
+    </div>
+
+    <!-- PHASE 4: VENDOR RETURNS -->
+    <div class="phase-lane">
+      <div class="phase-label">Phase 4 — Vendor Returns + ISP</div>
+      <div class="phase-row">
+        <div class="wu-node agent" data-wu="06" data-deps="04" data-downstream="09">
+          <div class="wu-header">
+            <span class="wu-number">WU-06</span>
+            <span class="wu-type">Agent</span>
+          </div>
+          <div class="wu-name">CDS Verification Extraction</div>
+          <div class="wu-data">Sindri: <code>sir_vendor</code></div>
+          <div class="wu-trigger">Trigger: CDS email return</div>
+          <div class="wu-rhodes yes">RHODES</div>
+        </div>
+
+        <div class="wu-node agent" data-wu="07" data-deps="04" data-downstream="09">
+          <div class="wu-header">
+            <span class="wu-number">WU-07</span>
+            <span class="wu-type">Agent</span>
+          </div>
+          <div class="wu-name">Vendor BI Extraction</div>
+          <div class="wu-data">Sindri: <code>inspection_vendor</code></div>
+          <div class="wu-trigger">Trigger: Worksmith email return</div>
+          <div class="wu-rhodes yes">RHODES</div>
+        </div>
+
+        <div class="wu-node agent" data-wu="08" data-deps="" data-downstream="10,13">
+          <div class="wu-header">
+            <span class="wu-number">WU-08</span>
+            <span class="wu-type">Agent</span>
+          </div>
+          <div class="wu-name">ISP Extraction</div>
+          <div class="wu-data">Sindri: <code>isp_extract</code></div>
+          <div class="wu-trigger">Trigger: ISP doc uploaded</div>
+          <div class="wu-rhodes yes">RHODES</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PHASE 5: PROCESSING -->
+    <div class="phase-lane">
+      <div class="phase-label">Phase 5 — Delta + Cost Processing</div>
+      <div class="phase-row">
+        <div class="wu-node script" data-wu="09" data-deps="06,07" data-downstream="13">
+          <div class="wu-header">
+            <span class="wu-number">WU-09</span>
+            <span class="wu-type">Script</span>
+          </div>
+          <div class="wu-name">Delta Computation</div>
+          <div class="wu-data">Sindri: <code>sir_delta</code> <code>inspection_delta</code></div>
+          <div class="wu-trigger">Fires when AI + vendor pair exists</div>
+          <div class="wu-rhodes no">Optional QA</div>
+        </div>
+
+        <div class="wu-node script" data-wu="10" data-deps="08,07" data-downstream="12">
+          <div class="wu-header">
+            <span class="wu-number">WU-10</span>
+            <span class="wu-type">Script</span>
+          </div>
+          <div class="wu-name">RayCon Cost Estimates</div>
+          <div class="wu-data">Sindri: <code>cost_estimates</code></div>
+          <div class="wu-trigger">Reads: <code>isp_extract</code> + <code>inspection_vendor</code></div>
+          <div class="wu-rhodes yes">RHODES</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PHASE 6: ASSEMBLY -->
+    <div class="phase-lane">
+      <div class="phase-label">Phase 6 — Plan + Report Assembly</div>
+      <div class="phase-row">
+        <div class="wu-node agent" data-wu="12" data-deps="10,06,07" data-downstream="13">
+          <div class="wu-header">
+            <span class="wu-number">WU-12</span>
+            <span class="wu-type">Agent</span>
+          </div>
+          <div class="wu-name">Opening Plan</div>
+          <div class="wu-data">Sindri: <code>opening_plan</code></div>
+          <div class="wu-trigger">Reads: SIR + inspection + costs</div>
+          <div class="wu-rhodes yes">RHODES</div>
+        </div>
+
+        <div class="wu-node agent" data-wu="13" data-deps="12,09,08,03,11" data-downstream="14">
+          <div class="wu-header">
+            <span class="wu-number">WU-13</span>
+            <span class="wu-type">Agent</span>
+          </div>
+          <div class="wu-name">DD Report Assembly</div>
+          <div class="wu-data">Sindri: <code>dd_report</code></div>
+          <div class="wu-trigger">Min data threshold met</div>
+          <div class="wu-rhodes yes">RHODES</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PHASE 7: DISTRIBUTION -->
+    <div class="phase-lane">
+      <div class="phase-label">Phase 7 — Distribution</div>
+      <div class="phase-row">
+        <div class="wu-node script" data-wu="14" data-deps="13" data-downstream="">
+          <div class="wu-header">
+            <span class="wu-number">WU-14</span>
+            <span class="wu-type">Script</span>
+          </div>
+          <div class="wu-name">Report Distribution</div>
+          <div class="wu-data">Sindri: <code>distribution_log</code></div>
+          <div class="wu-trigger">Reads: <code>dd_report</code></div>
+          <div class="wu-rhodes no">No RHODES</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SVG connections drawn by JS -->
+    <svg class="connections" id="connections"></svg>
+  </div>
+</div>
+
+<!-- DETAIL PANEL -->
+<div class="overlay" id="overlay"></div>
+<div class="detail-panel" id="detailPanel">
+  <button class="detail-close" id="detailClose">&times;</button>
+  <h2 id="detailTitle"></h2>
+  <div class="detail-type" id="detailType"></div>
+  <div id="detailContent"></div>
+</div>
+
+<script>
+// Work unit detail data
+const wuDetails = {
+  '01': {
+    name: 'New Site Intake',
+    type: 'script',
+    purpose: 'Parse a New Site email and stand up the site record so downstream work units have something to work from.',
+    trigger: 'New Site email received (LOI attachment detected)',
+    sindriOut: 'site_meta',
+    rhodesWrite: 'Yes — site record',
+    connectors: ['Gmail', 'RHODES', 'Google Drive'],
+    deps: [],
+    downstream: ['02', '03', '05', '11'],
+    keyFields: ['site_id', 'address', 'city', 'state', 'school_type', 'drive_folder_url', 'loi_doc_url']
+  },
+  '02': {
+    name: 'AI SIR Generation',
+    type: 'agent',
+    purpose: 'Run the ease-of-conversion skill to produce a full AI Site Investigation Report with jurisdiction research, code analysis, and feasibility scoring.',
+    trigger: 'WU-01 complete (site_meta exists)',
+    sindriOut: 'sir_ai',
+    rhodesWrite: 'Yes — long-term SIR record',
+    connectors: ['Google Drive'],
+    deps: ['01'],
+    downstream: ['04'],
+    keyFields: ['report_url', 'e_occupancy_score', 'recommendation', 'sir_sections (structured)']
+  },
+  '03': {
+    name: 'School Approval',
+    type: 'agent',
+    purpose: 'Score the address for education approval difficulty. Rates how hard it is to legally operate a private K-8 school by state.',
+    trigger: 'WU-01 complete (site_meta exists)',
+    sindriOut: 'school_approval',
+    rhodesWrite: 'Yes — regulatory record',
+    connectors: [],
+    deps: ['01'],
+    downstream: ['13'],
+    keyFields: ['approval_difficulty', 'state_rating', 'regulatory_requirements']
+  },
+  '04': {
+    name: 'Vendor Dispatch (CDS + Worksmith)',
+    type: 'script',
+    purpose: 'CDS gets the full SIR with a verification overlay for B/C claims. Worksmith gets a single pre-filled inspection checklist — the template populated with AI findings plus site-specific tasks appended.',
+    trigger: 'WU-02 complete (sir_ai exists)',
+    sindriOut: 'vendor_packets_sent',
+    rhodesWrite: 'No — transient status',
+    connectors: ['Gmail (SES)', 'Google Drive'],
+    deps: ['02'],
+    downstream: ['06', '07'],
+    keyFields: ['cds_report_url', 'cds_bc_item_count', 'worksmith_checklist_url', 'worksmith_prefill_count']
+  },
+  '05': {
+    name: 'Location Presentation',
+    type: 'script',
+    purpose: 'Generate a Google Slides location presentation with enrollment scores, wealth data, and map imagery.',
+    trigger: 'WU-01 complete (site_meta exists)',
+    sindriOut: 'presentation_url',
+    rhodesWrite: 'No — artefact only',
+    connectors: ['Google Slides', 'Google Drive'],
+    deps: ['01'],
+    downstream: [],
+    keyFields: ['presentation_url']
+  },
+  '06': {
+    name: 'CDS Verification Extraction',
+    type: 'agent',
+    purpose: 'Read the CDS verification report returned via email. Extract verified findings, corrections, and source citations using claim-id matching.',
+    trigger: 'CDS email return arrives',
+    sindriOut: 'sir_vendor',
+    rhodesWrite: 'Yes — vendor data',
+    connectors: ['Gmail', 'Google Drive'],
+    deps: ['04'],
+    downstream: ['09'],
+    keyFields: ['verification_summary', 'verified_items[]', 'claim-id matching']
+  },
+  '07': {
+    name: 'Vendor BI Extraction',
+    type: 'agent',
+    purpose: 'Read the completed Worksmith pre-filled inspection checklist. Extract 11-section findings, deal-killer flags, cost estimates, and site-specific task responses.',
+    trigger: 'Worksmith email return arrives',
+    sindriOut: 'inspection_vendor',
+    rhodesWrite: 'Yes — vendor data',
+    connectors: ['Gmail', 'Google Drive'],
+    deps: ['04'],
+    downstream: ['09'],
+    keyFields: ['deal_killer_flags', '11 inspection sections', 'cost_estimates[]', 'deficiency_summary', 'site_specific_tasks[]']
+  },
+  '08': {
+    name: 'ISP Extraction',
+    type: 'agent',
+    purpose: 'Extract structured data from an Interior Space Plan PDF — capacity analysis, classroom assignments, room/door schedules, ADA pre-check, IBC compliance.',
+    trigger: 'ISP document uploaded to Drive',
+    sindriOut: 'isp_extract',
+    rhodesWrite: 'Yes — capacity data',
+    connectors: ['Google Drive'],
+    deps: [],
+    downstream: ['10', '13'],
+    keyFields: ['capacity_analysis', 'classroom_assignments[]', 'room_schedule[]', 'door_schedule[]', 'ada_pre_check']
+  },
+  '09': {
+    name: 'Delta Computation',
+    type: 'script',
+    purpose: 'Diff AI predictions against vendor findings. Compute field-by-field deltas using claim-id matching. Feeds QA loop for AI improvement.',
+    trigger: 'WU-06 or WU-07 complete (AI + vendor pair exists)',
+    sindriOut: 'sir_delta, inspection_delta',
+    rhodesWrite: 'Optional — QA metric',
+    connectors: [],
+    deps: ['06', '07'],
+    downstream: ['13'],
+    keyFields: ['confirmed_count', 'corrected_count', 'new_finding_count', 'accuracy_score']
+  },
+  '10': {
+    name: 'RayCon Cost Estimates',
+    type: 'script',
+    purpose: 'Combine ISP capacity data with inspection findings to generate construction cost estimates by trade.',
+    trigger: 'ISP + inspection data ready',
+    sindriOut: 'cost_estimates',
+    rhodesWrite: 'Yes — cost data',
+    connectors: [],
+    deps: ['08', '07'],
+    downstream: ['12'],
+    keyFields: ['estimates_by_trade[]', 'total_low', 'total_high', 'contingency']
+  },
+  '11': {
+    name: 'Shovels Permit History',
+    type: 'script',
+    purpose: 'Pull historical permit data for the property from the Shovels API. Provides context on prior construction and renovation work.',
+    trigger: 'WU-01 complete (site_meta exists)',
+    sindriOut: 'permit_history',
+    rhodesWrite: 'Yes — permit data',
+    connectors: ['Shovels API'],
+    deps: ['01'],
+    downstream: ['13'],
+    keyFields: ['permits[]', 'total_construction_value', 'most_recent_permit']
+  },
+  '12': {
+    name: 'Opening Plan',
+    type: 'agent',
+    purpose: 'Convert SIR + inspection + cost data into a Permitting Plan with 3 scenarios (best/realistic/worst), gating factors, and cited risk analysis.',
+    trigger: 'SIR + inspection + costs all ready',
+    sindriOut: 'opening_plan',
+    rhodesWrite: 'Yes — decision doc',
+    connectors: ['Google Drive'],
+    deps: ['10', '06', '07'],
+    downstream: ['13'],
+    keyFields: ['recommendation', 'best_case_date', 'realistic_date', 'worst_case_date', 'gating_factors[]']
+  },
+  '13': {
+    name: 'DD Report Assembly',
+    type: 'agent',
+    purpose: 'Assemble the full Due Diligence Report from all upstream data. Reads pre-existing documents — does NOT run skills. Dual-column format for AI vs vendor comparison.',
+    trigger: 'Minimum data threshold met',
+    sindriOut: 'dd_report',
+    rhodesWrite: 'Yes — report record',
+    connectors: ['Google Drive', 'Google Docs'],
+    deps: ['12', '09', '08', '03', '11'],
+    downstream: ['14'],
+    keyFields: ['report_url', 'can_we_open (yes/no)', 'recommended_path', 'total_cost_range']
+  },
+  '14': {
+    name: 'Report Distribution',
+    type: 'script',
+    purpose: 'Distribute the completed DD Report to stakeholders via email and update the site stage in RHODES.',
+    trigger: 'WU-13 complete (dd_report exists)',
+    sindriOut: 'distribution_log',
+    rhodesWrite: 'No — transient',
+    connectors: ['Gmail (SES)', 'RHODES'],
+    deps: ['13'],
+    downstream: [],
+    keyFields: ['recipients[]', 'sent_at', 'report_url']
+  }
+};
+
+// Draw connections
+function drawConnections() {
+  const svg = document.getElementById('connections');
+  const canvas = document.getElementById('canvas');
+  const canvasRect = canvas.getBoundingClientRect();
+
+  // Set SVG size to match canvas
+  svg.setAttribute('width', canvas.scrollWidth);
+  svg.setAttribute('height', canvas.scrollHeight);
+  svg.style.width = canvas.scrollWidth + 'px';
+  svg.style.height = canvas.scrollHeight + 'px';
+
+  let paths = '';
+  document.querySelectorAll('.wu-node').forEach(node => {
+    const wu = node.dataset.wu;
+    const downstream = node.dataset.downstream.split(',').filter(Boolean);
+
+    downstream.forEach(target => {
+      const targetNode = document.querySelector(`[data-wu="${target}"]`);
+      if (!targetNode) return;
+
+      const fromRect = node.getBoundingClientRect();
+      const toRect = targetNode.getBoundingClientRect();
+
+      const x1 = fromRect.left + fromRect.width / 2 - canvasRect.left;
+      const y1 = fromRect.bottom - canvasRect.top;
+      const x2 = toRect.left + toRect.width / 2 - canvasRect.left;
+      const y2 = toRect.top - canvasRect.top;
+
+      const midY = y1 + (y2 - y1) * 0.5;
+      const d = `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`;
+
+      paths += `<path d="${d}" data-from="${wu}" data-to="${target}"/>`;
+    });
+  });
+
+  svg.innerHTML = paths;
+}
+
+// Highlight connections
+function highlightNode(wu) {
+  const allNodes = document.querySelectorAll('.wu-node');
+  const allPaths = document.querySelectorAll('.connections path');
+  const details = wuDetails[wu];
+  if (!details) return;
+
+  const related = new Set([wu, ...details.deps, ...details.downstream]);
+
+  allNodes.forEach(n => {
+    if (related.has(n.dataset.wu)) {
+      n.classList.remove('dimmed');
+      if (n.dataset.wu === wu) n.classList.add('active');
+    } else {
+      n.classList.add('dimmed');
+    }
+  });
+
+  allPaths.forEach(p => {
+    if (p.dataset.from === wu || p.dataset.to === wu) {
+      p.classList.add('highlighted');
+      p.classList.remove('dimmed');
+    } else {
+      p.classList.add('dimmed');
+      p.classList.remove('highlighted');
+    }
+  });
+}
+
+function clearHighlight() {
+  document.querySelectorAll('.wu-node').forEach(n => {
+    n.classList.remove('dimmed', 'active');
+  });
+  document.querySelectorAll('.connections path').forEach(p => {
+    p.classList.remove('highlighted', 'dimmed');
+  });
+}
+
+// Detail panel
+function showDetail(wu) {
+  const d = wuDetails[wu];
+  if (!d) return;
+
+  document.getElementById('detailTitle').textContent = `WU-${wu}: ${d.name}`;
+  const typeEl = document.getElementById('detailType');
+  typeEl.textContent = d.type.charAt(0).toUpperCase() + d.type.slice(1);
+  typeEl.className = 'detail-type ' + d.type;
+
+  let html = '';
+
+  html += `<div class="detail-section"><h3>Purpose</h3><p>${d.purpose}</p></div>`;
+  html += `<div class="detail-section"><h3>Trigger</h3><p>${d.trigger}</p></div>`;
+  html += `<div class="detail-section"><h3>Sindri Output</h3><p><code>${d.sindriOut}</code></p></div>`;
+  html += `<div class="detail-section"><h3>RHODES</h3><p>${d.rhodesWrite}</p></div>`;
+
+  if (d.connectors.length) {
+    html += `<div class="detail-section"><h3>Connectors</h3><p>${d.connectors.join(', ')}</p></div>`;
+  }
+
+  if (d.keyFields.length) {
+    html += `<div class="detail-section"><h3>Key Output Fields</h3><ul>`;
+    d.keyFields.forEach(f => { html += `<li><code>${f}</code></li>`; });
+    html += `</ul></div>`;
+  }
+
+  if (d.deps.length) {
+    html += `<div class="detail-section"><h3>Depends On</h3><div class="detail-deps">`;
+    d.deps.forEach(dep => {
+      const depName = wuDetails[dep] ? wuDetails[dep].name : '';
+      html += `<button class="detail-dep-tag" data-nav="${dep}">WU-${dep} ${depName}</button>`;
+    });
+    html += `</div></div>`;
+  }
+
+  if (d.downstream.length) {
+    html += `<div class="detail-section"><h3>Feeds Into</h3><div class="detail-deps">`;
+    d.downstream.forEach(ds => {
+      const dsName = wuDetails[ds] ? wuDetails[ds].name : '';
+      html += `<button class="detail-dep-tag" data-nav="${ds}">WU-${ds} ${dsName}</button>`;
+    });
+    html += `</div></div>`;
+  }
+
+  document.getElementById('detailContent').innerHTML = html;
+
+  // Add nav handlers
+  document.querySelectorAll('.detail-dep-tag').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const nav = btn.dataset.nav;
+      clearHighlight();
+      highlightNode(nav);
+      showDetail(nav);
+      document.querySelector(`[data-wu="${nav}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+
+  document.getElementById('detailPanel').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+  highlightNode(wu);
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+  clearHighlight();
+}
+
+// Event listeners
+document.querySelectorAll('.wu-node').forEach(node => {
+  node.addEventListener('click', () => showDetail(node.dataset.wu));
+});
+
+document.getElementById('detailClose').addEventListener('click', closeDetail);
+document.getElementById('overlay').addEventListener('click', closeDetail);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDetail();
+});
+
+// Theme toggle
+(function () {
+  const t = document.querySelector('[data-theme-toggle]');
+  const r = document.documentElement;
+  let d = matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
+  r.setAttribute('data-theme', d);
+  t && t.addEventListener('click', () => {
+    d = d === 'dark' ? 'light' : 'dark';
+    r.setAttribute('data-theme', d);
+    t.innerHTML = d === 'dark'
+      ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
+      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  });
+})();
+
+// Initial draw + redraw on resize
+window.addEventListener('load', () => {
+  setTimeout(drawConnections, 100);
+});
+window.addEventListener('resize', drawConnections);
+</script>
+
+</body>
+</html>
