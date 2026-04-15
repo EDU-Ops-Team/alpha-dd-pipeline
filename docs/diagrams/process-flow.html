@@ -713,7 +713,8 @@ const wuDetails = {
     connectors: ['Gmail', 'Google Drive'],
     deps: ['04'],
     downstream: ['09'],
-    keyFields: ['verification_summary', 'verified_items[]', 'claim-id matching']
+    keyFields: ['verification_summary', 'verified_items[]', 'claim-id matching'],
+    skill: 'ops-skills/cds-verification-extraction'
   },
   '07': {
     name: 'Vendor BI Extraction',
@@ -725,7 +726,8 @@ const wuDetails = {
     connectors: ['Gmail', 'Google Drive'],
     deps: ['04'],
     downstream: ['09'],
-    keyFields: ['deal_killer_flags', '11 inspection sections', 'cost_estimates[]', 'deficiency_summary', 'site_specific_tasks[]']
+    keyFields: ['deal_killer_flags', '11 inspection sections', 'cost_estimates[]', 'deficiency_summary', 'site_specific_tasks[]'],
+    skill: 'ops-skills/vendor-bi-extraction'
   },
   '08': {
     name: 'ISP Extraction',
@@ -737,7 +739,8 @@ const wuDetails = {
     connectors: ['Google Drive'],
     deps: [],
     downstream: ['10', '13'],
-    keyFields: ['capacity_analysis', 'classroom_assignments[]', 'room_schedule[]', 'door_schedule[]', 'ada_pre_check']
+    keyFields: ['capacity_analysis', 'classroom_assignments[]', 'room_schedule[]', 'door_schedule[]', 'ada_pre_check'],
+    skill: 'ops-skills/isp-extraction'
   },
   '09': {
     name: 'Delta Computation',
@@ -797,7 +800,8 @@ const wuDetails = {
     connectors: ['Google Drive', 'Google Docs'],
     deps: ['12', '09', '08', '03', '11'],
     downstream: ['14'],
-    keyFields: ['report_url', 'can_we_open (yes/no)', 'recommended_path', 'total_cost_range']
+    keyFields: ['report_url', 'can_we_open (yes/no)', 'recommended_path', 'total_cost_range'],
+    skill: 'ops-skills/dd-report-assembly'
   },
   '14': {
     name: 'Report Distribution',
