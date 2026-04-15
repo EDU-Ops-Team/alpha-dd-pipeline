@@ -202,37 +202,137 @@ Fields may be null if the vendor did not address them.
 
 ## isp_extract (WU-08: ISP Extraction)
 
+The ISP is a "Program Fit Analysis" PDF — much richer than a basic floor plan. Full schema is in `skills/isp-extraction/references/isp-extraction-schema.json`. Key fields consumed by this agent:
+
 ```json
 {
   "extracted_at": "ISO timestamp",
-  "source_doc_url": "string — Drive URL",
+  "source_doc_url": "string — Drive URL of the ISP PDF",
   "address": "string",
-  "total_sf": "integer",
-  "usable_sf": "integer",
-  "rooms": [
-    {
-      "name": "string",
-      "type": "classroom | office | restroom | common | kitchen | storage | other",
-      "sf": "integer",
-      "capacity": "integer | null",
-      "ada_compliant": "boolean | null",
-      "notes": "string"
+
+  "building_code_info": {
+    "building_code": "string — e.g., 'IBC 2018'",
+    "occupancy_classification": "string — e.g., 'Group E (Educational)'",
+    "jurisdiction": "string",
+    "amendments": "string | null",
+    "sprinkler_system": "boolean",
+    "total_occupant_load": "integer",
+    "gross_floor_area_sf": "integer"
+  },
+
+  "executive_summary": {
+    "program_fit_score": "integer 0-100",
+    "program_fit_rating": "GOOD FIT | MARGINAL FIT | POOR FIT",
+    "requirements_met": "string — e.g., '9/9'",
+    "requirements_score": "string | null — e.g., '60/60'",
+    "quality_score": "string | null — e.g., '38/40'",
+    "total_rooms": "integer",
+    "rooms_assigned": "integer",
+    "rooms_unassigned": "integer",
+    "target_capacity": "integer | null",
+    "recommended_capacity": "integer",
+    "avg_fit_score_pct": "number — e.g., 89.3",
+    "best_tier_met": "string — e.g., 'ideal'"
+  },
+
+  "capacity_analysis": {
+    "grade_span": "string",
+    "guides_required": "integer",
+    "recommended_capacity": "integer",
+    "gross_ceiling_capacity": "integer | null",
+    "nla_capacity": "integer | null",
+    "effective_sf_per_student": "integer | null",
+    "sharing_penalty": "string",
+    "space_requirements": {
+      "workshop": "Met | Not Met",
+      "one_on_one_meeting": "Met | Not Met",
+      "play_area": "Met | Not Met",
+      "dining_commons": "Met | Not Met"
     }
+  },
+
+  "classroom_assignments": [
+    { "room_id": "string", "level": "string", "students": "integer", "area_sf": "integer" }
   ],
-  "capacity_tiers": {
-    "micro": { "rooms_used": "integer", "max_students": "integer" },
-    "250": { "rooms_used": "integer", "max_students": "integer" },
-    "1000": { "rooms_used": "integer", "max_students": "integer" }
+  "level_totals": [
+    { "level": "string", "room_count": "integer", "total_students": "integer" }
+  ],
+
+  "tier_evaluation": [
+    { "tier": "string", "meets": "boolean", "required_met": "string", "assignment_pct": "number", "fit_pct": "number", "missing": "string | null" }
+  ],
+
+  "ada_precheck": {
+    "score": "integer 0-100",
+    "errors": "integer",
+    "warnings": "integer",
+    "violations_by_rule": [ { "rule": "string", "count": "integer", "severity_breakdown": "string" } ],
+    "violations": [
+      { "severity": "ERROR | WARNING", "location": "string", "rule": "string", "actual": "string | null", "required": "string | null", "description": "string" }
+    ]
   },
-  "ada_summary": {
-    "accessible_entrance": "boolean | null",
-    "accessible_restrooms": "integer",
-    "accessible_classrooms": "integer",
-    "notes": "string"
+
+  "ibc_compliance": {
+    "score": "integer 0-100",
+    "errors": "integer",
+    "warnings": "integer",
+    "total_occupant_load": "integer",
+    "occupant_load_by_room": [
+      { "room_id": "string", "type": "string", "area_sf": "integer", "factor": "integer", "method": "net | gross", "load": "integer" }
+    ],
+    "plumbing_fixtures": {
+      "water_closets_male": { "required": "integer", "notes": "string" },
+      "water_closets_female": { "required": "integer", "notes": "string" },
+      "lavatories": { "required": "integer", "notes": "string" },
+      "drinking_fountains": { "required": "integer", "notes": "string" }
+    },
+    "plumbing_summary": "string | null",
+    "violations": [
+      { "severity": "ERROR | WARNING | INFO", "rule": "string", "description": "string" }
+    ]
   },
-  "special_use_areas": ["string"]
+
+  "adjacency_compliance": {
+    "score": "integer 0-100",
+    "critical_count": "integer",
+    "high_count": "integer",
+    "medium_count": "integer",
+    "violations": [
+      { "priority": "Critical | High | Medium", "rule_number": "integer", "room_types": "string", "relationship": "string", "detail": "string" }
+    ]
+  },
+
+  "requirement_status": [
+    { "room_type": "string", "required": "string", "assigned": "integer", "status": "Met | Not Met" }
+  ],
+
+  "optimization_proposals": [
+    { "number": "integer", "action": "string", "rooms": "string", "result_type": "string | null", "result_sf": "integer | null", "reason": "string", "priority": "string", "fit_delta": "number" }
+  ],
+
+  "room_schedule": [
+    { "room_id": "string", "floor": "string", "assignment": "string", "area_sf": "integer", "dimensions": "string | null", "occupant_load": "integer | null", "fit_score_pct": "integer | null" }
+  ],
+
+  "door_schedule": [
+    { "door_id": "string", "floor": "string", "width_in": "number", "height_in": "number", "notes": "string | null" }
+  ]
 }
 ```
+
+**DD Report token mapping for ISP data:**
+
+| Token | ISP Source Field |
+|---|---|
+| Recommended capacity | `executive_summary.recommended_capacity` |
+| Program fit score | `executive_summary.program_fit_score` |
+| Grade span | `capacity_analysis.grade_span` |
+| Classroom count | Count of `room_schedule` entries where `assignment` = "CLASSROOM" |
+| Total SF | `building_code_info.gross_floor_area_sf` |
+| SF per student | `capacity_analysis.effective_sf_per_student` |
+| Plumbing gap | `ibc_compliance.plumbing_summary` |
+| ADA issues count | `ada_precheck.errors` + `ada_precheck.warnings` |
+| Adjacency score | `adjacency_compliance.score` |
 
 ---
 
