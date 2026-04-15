@@ -87,4 +87,4 @@ git submodule update --remote skills/ops-skills
 | Opening Plan v2 (AGENT-12) | Complete — in Ops-Skills (v2.2) |
 | DD Report Assembly (AGENT-13) | Complete — in Ops-Skills |
 | Work unit decomposition (all 14 specs) | Complete |
-| Scripts (7 total) | Pending — TypeScript Convex functions next |
+| Scripts (7 total) | Complete — TypeScript stubs with full logic, typed interfaces, shared types |
