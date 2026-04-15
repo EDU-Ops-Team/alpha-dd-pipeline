@@ -132,7 +132,7 @@ The DD pipeline breaks into 14 work units. 5 are agent skills (Claude reads docu
 
 ### SCRIPT-04: Vendor Dispatch
 
-**Purpose:** Apply vendor-specific overlays to the full AI SIR report and dispatch to both CDS (phone verification) and Worksmith (field inspection). Each vendor gets the complete report with their own overlay format — CDS gets verification columns for B/C claims; Worksmith gets an inspection checklist overlay for D-confidence field items plus pre-filled findings they confirm or correct on-site.
+**Purpose:** Dispatch vendor packets to CDS (phone verification) and Worksmith (field inspection). CDS gets the full SIR with a verification overlay. Worksmith gets a single pre-filled inspection checklist — the template populated with everything AI research already found, plus site-specific tasks appended for issues the SIR flagged but couldn't resolve remotely.
 
 **Invoking Event:** `UpstreamCompleted` from WU-02 (AI SIR complete)
 
@@ -152,9 +152,10 @@ The DD pipeline breaks into 14 work units. 5 are agent skills (Claude reads docu
     "cds_bc_item_count": "integer — number of B/C items CDS needs to verify",
     "worksmith_email_sent_at": "ISO timestamp",
     "worksmith_recipient": "string",
-    "worksmith_report_url": "string — Drive URL of the Worksmith inspection report (full SIR + inspection overlay)",
-    "worksmith_checklist_item_count": "integer — number of inspection checklist items",
-    "worksmith_prefill_item_count": "integer — number of AI pre-filled findings for field confirmation"
+    "worksmith_checklist_url": "string — Drive URL of the pre-filled inspection checklist",
+    "worksmith_checklist_item_count": "integer — total checklist items (template + appended)",
+    "worksmith_prefill_count": "integer — items pre-filled from AI research",
+    "worksmith_appended_task_count": "integer — site-specific tasks added beyond template"
   }
 }
 ```
@@ -167,7 +168,7 @@ The DD pipeline breaks into 14 work units. 5 are agent skills (Claude reads docu
 2. Read site_meta from Sindri (address, drive folder URL)
 3. Read the full AI SIR markdown from Drive (report_url in sir_ai)
 
---- CDS Verification Report (unchanged from prior spec) ---
+--- CDS Verification Report (unchanged) ---
 4. Generate CDS Verification Report:
    a. Scan all tables for B/C confidence rows → build Verification Task Summary table
       - Group by authority (batch calls)
@@ -180,94 +181,98 @@ The DD pipeline breaks into 14 work units. 5 are agent skills (Claude reads docu
    e. A-confidence rows and D-confidence task cards: unchanged
    f. Save to Drive → M2 folder as {address}_cds-verification.md
 
---- Worksmith Inspection Report (full SIR + inspection overlay) ---
-5. Generate Worksmith Inspection Report:
-   a. Build the Inspection Header block:
-      - Property Address, Target Occupancy (E — Private K-8),
+--- Worksmith Pre-Filled Inspection Checklist ---
+5. Generate Worksmith checklist — ONE document, the checklist IS the deliverable:
+   a. Start from the standard 11-section template structure
+      (Exterior/Site, Parking/Drop-off, Entry/Egress, Fire Alarm,
+      Sprinkler, Emergency Systems, Restrooms/Plumbing, ADA,
+      Structural, HVAC/Mechanical, Electrical)
+   b. Build the header block:
+      - Property Address, Inspection Date (blank), Inspector Name/Firm,
+        Inspector Contact, Target Occupancy (E — Private K-8),
         Planned Student Count, Planned Staff Count,
         Building Sq. Footage, Current Occupancy Type
-      (all from sir_ai site facts and Phase 7)
-   b. Build the Deal-Killer Questions section:
-      - 5 binary questions from SIR critical vendor tasks:
-        1. Is there a safe parent drop-off/pick-up area with no backing onto arterial roads?
-        2. Are there at least 2 exits from the student-occupied space with adequate separation?
+      (all from sir_ai site facts and Phase 7 — pre-fill what we know)
+   c. Prepend the Deal-Killer Questions section (answer FIRST):
+      - 5 binary questions:
+        1. Is there a safe parent drop-off/pick-up area?
+        2. Are there at least 2 exits with adequate separation?
         3. Can all exit doors open outward with panic hardware?
-        4. Is the building free from obvious structural deficiency (sagging floors, major cracks, settling)?
-        5. Is the building free from visible mold, significant water damage, or active leaks?
-      - Each has: Yes / No / Needs Further Evaluation
-      - NOTE: If ANY answer is No → call Alpha contact immediately. Do not continue inspection.
-   c. Build the Inspection Priority Map:
-      - Pull D-confidence items from SIR Phase 7 and vendor task cards
-      - Classify as RED (deal-killers), YELLOW (budget/timeline impact), GREEN (confirm-and-go)
-      - This tells the inspector what to focus on and why
-   d. Build the 11-Section Inspection Checklist overlay:
-      For each of the 11 template sections (Exterior/Site, Parking/Drop-off,
-      Entry/Egress, Fire Alarm, Sprinkler, Emergency Systems,
-      Restrooms/Plumbing, ADA, Structural, HVAC/Mechanical, Electrical):
-        i.  Pull every checklist line item from the standard template
-        ii. For items where the SIR has a finding (any confidence level):
-            - Pre-fill the "AI Pre-Fill" column with the SIR value
-            - Embed a claim-id HTML comment for round-trip matching
-        iii. Table format per section:
-             | Item | AI Pre-Fill | Confirmed ☐ | Finding | Source/Citation | Notes |
-        iv.  After each section table, include contextual NOTE boxes where
-             the template has them (e.g., fire alarm cost/timeline note,
-             59-student bathroom threshold, E-occupancy ventilation rates)
-   e. Append the Occupant Load Verification section:
+        4. Is the building free from obvious structural deficiency?
+        5. Is the building free from visible mold, water damage, or active leaks?
+      - Each: ☐ Yes  ☐ No  ☐ Needs Further Evaluation
+      - If ANY answer is No → call Alpha contact immediately. Stop inspection.
+   d. Pre-fill checklist tables from SIR findings:
+      For each of the 11 sections, every template line item becomes a table row:
+      | Item | AI Pre-Fill | Confirmed ☐ | Finding | Source/Citation | Notes |
+      - If the SIR has a finding for this item (any confidence level A/B/C):
+        populate "AI Pre-Fill" with the value + confidence tag
+        embed a claim-id HTML comment: <!-- claim-id: BI-001 -->
+      - If the SIR has no finding (D-confidence or not addressed):
+        "AI Pre-Fill" = blank. This is a pure field task.
+      - After each section table, include the template's contextual NOTE
+        if applicable (fire alarm cost/timeline, 59-student bathroom threshold,
+        E-occupancy ventilation rates, etc.)
+   e. APPEND site-specific tasks after the 11 standard sections:
+      Scan the SIR for D-confidence items and vendor task cards that do NOT
+      map to any template line item. These are site-specific risks the AI
+      identified but couldn't resolve remotely. Add them as:
+
+      ## Site-Specific Tasks
+      These items were flagged by AI research as needing field verification
+      for this specific property. They go beyond the standard checklist.
+
+      | # | Task | Why It Matters | What to Document |
+      (numbered, with plain-English explanation of why each matters)
+
+   f. Append Occupant Load Verification:
       - Formula 1: Total Occupant Load (Net Floor Area ÷ 100)
       - Formula 2: Student Capacity (Net Learning Area ÷ 40)
-      - Pre-fill with SIR values if available, mark for inspector verification
-   f. Append the Cost Estimate Format table:
+      - Pre-fill with SIR values where available
+   g. Append Cost Estimate table:
       - Item | Description | Priority | Low Est. | High Est. | Notes
-      - Pre-populate rows for: Fire Alarm, Egress, ADA, Plumbing, HVAC,
-        Electrical, Structural, Other — values blank for inspector
-   g. Append the Overall Assessment section:
-      - Inspector recommendation checkboxes:
-        ☐ PROCEED — No critical issues identified
-        ☐ PROCEED WITH CAUTION — Issues identified but remediation path exists
-        ☐ REQUIRES JUSTIFICATION — Significant issues, cost/timeline impact high
-        ☐ PASS — Critical issues, not recommended for school use
-      - Inspector signature, date, next inspection date fields
-   h. Prepend cover sheet with instructions:
+      - Pre-populate category rows: Fire Alarm, Egress, ADA, Plumbing,
+        HVAC, Electrical, Structural, Other — values blank for inspector
+   h. Append Overall Assessment:
+      - ☐ PROCEED — No critical issues
+      - ☐ PROCEED WITH CAUTION — Issues with remediation path
+      - ☐ REQUIRES JUSTIFICATION — Significant cost/timeline impact
+      - ☐ PASS — Critical issues, not recommended
+      - Inspector signature, date, next inspection date
+   i. Prepend cover instructions:
       ---
-      **How to use this report**
+      **How to use this checklist**
 
-      This document is the full AI Site Investigation Report for this address
-      with an inspection checklist overlay. Sections 1–8 are the complete
-      SIR — read them to understand the site context, zoning, permits,
-      and what AI research found remotely.
-
-      The Inspection Checklist (Section 9) is your field scope. Each section
-      has a table with an "AI Pre-Fill" column showing what we found remotely.
-      Your job:
-      1. Check the "Confirmed" box if the AI finding is correct
-      2. If incorrect, write the actual finding in the "Finding" column
-      3. Fill in "Source/Citation" for every item you actively verified
-      4. Use the Deal-Killer Questions FIRST — if any answer is No, call us
-      5. Complete the Cost Estimate table for every deficiency found
+      This checklist is pre-filled with findings from AI research. Your job:
+      1. Answer the Deal-Killer Questions FIRST — if any is No, call us
+      2. Work through each section — the "AI Pre-Fill" column shows what
+         we found remotely. Confirm it or write the correct finding.
+      3. Fill in Source/Citation for every item you verified
+      4. Complete the Site-Specific Tasks at the end — these are items
+         AI flagged as risks for THIS property specifically
+      5. Fill out the Cost Estimate table for every deficiency
       6. Select your overall recommendation
 
       Do not leave Source/Citation blank on any item you verified.
       ---
-   i. Save to Drive → M2 folder as {address}_worksmith-inspection.md
+   j. Save to Drive → M2 folder as {address}_worksmith-checklist.md
 
 6. Send CDS email with CDS verification report link
-7. Send Worksmith email with Worksmith inspection report link
+7. Send Worksmith email with pre-filled checklist link
 8. Write vendor_packets_sent to Sindri
 9. Signal completion
 ```
 
-**Key design decision — full-report approach for BOTH vendors:** Both CDS and Worksmith receive the full SIR with vendor-specific overlays instead of stripped-down packets. Benefits:
-- CDS gets context for their phone verification calls
-- Worksmith gets context for their physical inspection — knowing the zoning situation, permit path, and AI feasibility analysis helps them prioritize inspection time
-- Both produce single round-trip documents that AGENT-06 and AGENT-07 can extract from with claim-id matching
-- Eliminates the need to maintain separate brief templates that drift from the SIR structure
+**Key design decisions:**
 
-**Worksmith overlay vs CDS overlay — key differences:**
-- CDS overlay targets B/C confidence rows (remote claims that need phone verification)
-- Worksmith overlay targets D-confidence items + ALL physical-inspection items from the 11-section template (items that can only be confirmed on-site)
-- Worksmith overlay also pre-fills A/B/C items from the SIR so the inspector can confirm or correct them in the field — this catches remote research errors that phone calls cannot catch
-- Worksmith overlay includes cost estimate tables and occupant load verification — CDS does not
+**CDS** gets the full SIR with a verification overlay — they need the context for phone calls and the full report structure for targeted verification of B/C claims.
+
+**Worksmith** gets the checklist as the single deliverable — pre-filled, not accompanied by a separate SIR. The inspector standing in a building needs to know what to look at and what we think they'll find, not read about zoning appeals and fee formulas. The SIR research feeds INTO the checklist rather than sitting alongside it:
+- Template items with SIR findings → pre-filled (inspector confirms or corrects)
+- Template items without SIR findings → blank (pure field tasks)
+- SIR risks that don't map to template items → appended as site-specific tasks
+
+**Both** use claim-id HTML comments for round-trip extraction by AGENT-06 (CDS) and AGENT-07 (Worksmith).
 
 **Error handling:**
 - Email send fails → retry with exponential backoff (max 3 attempts)
@@ -801,11 +806,11 @@ exact row matching.
 
 ### AGENT-07: Vendor Building Inspection Extraction
 
-**Purpose:** Read a completed Worksmith Inspection Report (the full SIR + inspection overlay document returned from the field) and extract structured data into the standard inspection schema. The return document uses the same claim-id system as the CDS verification report, enabling field-by-field matching between AI findings and inspector findings.
+**Purpose:** Read a completed Worksmith pre-filled inspection checklist returned from the field and extract structured data into the standard inspection schema. The return is the same checklist document sent out via WU-04 — now with the inspector's findings filled in alongside the AI pre-fills. Claim-id HTML comments embedded during generation enable field-by-field delta matching.
 
 **Invoking Event:** Email received classified as "Worksmith Building Inspection Return"
 
-**Subs to Monitor:** Email inbox — classify as Worksmith return (look for Worksmith sender, inspection report attachment, or reply to the outbound Worksmith email from WU-04)
+**Subs to Monitor:** Email inbox — classify as Worksmith return (look for Worksmith sender, checklist attachment, or reply to the outbound Worksmith email from WU-04)
 
 **Connectors:** Gmail, Google Drive
 
@@ -885,6 +890,14 @@ exact row matching.
         "reason": "string"
       }
     ],
+    "site_specific_tasks": [
+      {
+        "task_number": "integer",
+        "task": "string — what was asked",
+        "finding": "string | null — inspector's response",
+        "documentation": "string | null — what they documented (photos, measurements, etc.)"
+      }
+    ],
     "vendor_notes": "string — any inspector observations not captured in structured fields"
   }
 }
@@ -897,23 +910,24 @@ exact row matching.
 # Vendor Building Inspection Extraction
 
 ## Purpose
-Extract structured data from a completed Worksmith Inspection Report
-(full SIR + inspection overlay returned from the field) into the
-standard inspection schema.
+Extract structured data from a completed Worksmith pre-filled inspection
+checklist returned from the field into the standard inspection schema.
 
 ## Input
-- Completed inspection report (from email attachment or Drive upload)
-  Format: markdown with 11-section inspection checklist tables,
-  cost estimate table, occupant load verification, overall assessment.
+- Completed checklist (from email attachment or Drive upload)
+  Format: markdown with header block, deal-killer questions,
+  11-section inspection tables, site-specific tasks, occupant load,
+  cost estimate table, overall assessment.
   Each table row has: Item | AI Pre-Fill | Confirmed | Finding | Source/Citation | Notes
   Claim-id HTML comments embedded after pre-filled rows.
 - site_meta (for address matching)
 - sir_ai (for claim-id cross-reference)
 
 ## Process
-1. Read the completed inspection report
+1. Read the completed checklist
 2. Extract header info: inspector name, date, overall recommendation
 3. Extract deal-killer flags (5 binary questions)
+   NOTE: if any_no = true, this is an early-exit signal — flag prominently
 4. For each of the 11 inspection sections:
    a. Parse the table rows
    b. For each row: extract item name, AI pre-fill, confirmed flag,
@@ -922,10 +936,12 @@ standard inspection schema.
    d. Classify: confirmed (AI + inspector agree), corrected (differ),
       new_finding (inspector found something AI missed),
       unverified (inspector left blank)
-5. Extract occupant load calculations
-6. Extract cost estimate table → structured array with totals
-7. Extract specialist referrals if any
-8. Compute deficiency summary: count by priority, sum cost ranges
+5. Extract site-specific task responses (appended section beyond the 11 standard)
+   - These are the D-confidence / SIR-flagged items unique to this property
+6. Extract occupant load calculations
+7. Extract cost estimate table → structured array with totals
+8. Extract specialist referrals if any
+9. Compute deficiency summary: count by priority, sum cost ranges
 
 ## Output
 - Structured JSON matching the inspection_vendor schema
