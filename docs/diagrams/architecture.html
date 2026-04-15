@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alpha DD Pipeline — Architecture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root, [data-theme="light"] {
+      --bg: #f7f6f2;
+      --surface: #ffffff;
+      --surface-2: #f3f0ec;
+      --surface-3: #eae7e1;
+      --border: #d4d1ca;
+      --border-light: #e6e4df;
+      --divider: #e6e4df;
+      --text: #28251d;
+      --text-2: #4a4740;
+      --text-muted: #7a7974;
+      --text-faint: #bab9b4;
+
+      --agent: #01696f;
+      --agent-bg: #e8f4f5;
+      --agent-border: #b0d8db;
+      --agent-glow: rgba(1, 105, 111, 0.12);
+
+      --script: #964219;
+      --script-bg: #faf0e8;
+      --script-border: #dfc4ad;
+      --script-glow: rgba(150, 66, 25, 0.12);
+
+      --pipeline-repo: #006494;
+      --pipeline-repo-bg: rgba(0, 100, 148, 0.04);
+      --pipeline-repo-border: rgba(0, 100, 148, 0.18);
+
+      --submodule: #7a39bb;
+      --submodule-bg: rgba(122, 57, 187, 0.04);
+      --submodule-border: rgba(122, 57, 187, 0.2);
+
+      --sindri: #006494;
+      --rhodes: #964219;
+
+      --shadow-sm: 0 1px 3px rgba(40, 37, 29, 0.06);
+      --shadow-md: 0 4px 12px rgba(40, 37, 29, 0.08);
+      --shadow-lg: 0 8px 24px rgba(40, 37, 29, 0.12);
+      --radius: 10px;
+      --radius-sm: 6px;
+      --transition: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    [data-theme="dark"] {
+      --bg: #141312;
+      --surface: #1e1d1b;
+      --surface-2: #262523;
+      --surface-3: #2d2c2a;
+      --border: #393836;
+      --border-light: #2d2c2a;
+      --divider: #2d2c2a;
+      --text: #e0dfdd;
+      --text-2: #b0afac;
+      --text-muted: #797876;
+      --text-faint: #5a5957;
+
+      --agent: #4f98a3;
+      --agent-bg: #1a2e30;
+      --agent-border: #2a4a4e;
+      --agent-glow: rgba(79, 152, 163, 0.15);
+
+      --script: #c87a4d;
+      --script-bg: #2a1f17;
+      --script-border: #4a3325;
+      --script-glow: rgba(200, 122, 77, 0.15);
+
+      --pipeline-repo: #5591c7;
+      --pipeline-repo-bg: rgba(85, 145, 199, 0.06);
+      --pipeline-repo-border: rgba(85, 145, 199, 0.2);
+
+      --submodule: #a86fdf;
+      --submodule-bg: rgba(168, 111, 223, 0.06);
+      --submodule-border: rgba(168, 111, 223, 0.2);
+
+      --sindri: #5591c7;
+      --rhodes: #c87a4d;
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+      --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.5;
+      min-height: 100dvh;
+    }
+
+    /* ─── HEADER ─── */
+    .header {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--bg);
+      border-bottom: 1px solid var(--divider);
+      padding: 14px 32px;
+      display: flex; align-items: center; justify-content: space-between;
+      backdrop-filter: blur(12px);
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .header h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+    .header-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 600;
+      padding: 2px 8px; border-radius: 4px;
+      background: var(--surface-2); color: var(--text-muted);
+      border: 1px solid var(--border-light);
+    }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+
+    .legend { display: flex; gap: 14px; font-size: 11px; font-weight: 500; color: var(--text-muted); }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+    .legend-dot.agent { background: var(--agent); }
+    .legend-dot.script { background: var(--script); }
+    .legend-line { width: 16px; height: 2px; border-radius: 1px; }
+    .legend-line.sindri { background: var(--sindri); }
+    .legend-line.rhodes { background: var(--rhodes); opacity: 0.5; }
+
+    .theme-toggle {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text-muted);
+      transition: all var(--transition);
+    }
+    .theme-toggle:hover { background: var(--surface-2); color: var(--text); }
+
+    /* ─── CANVAS ─── */
+    .canvas-wrap { width: 100%; overflow-x: auto; padding: 32px 32px 60px; }
+    .canvas { position: relative; min-width: 1060px; max-width: 1200px; margin: 0 auto; }
+
+    /* ─── SVG CONNECTIONS ─── */
+    .connections {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none; z-index: 1;
+    }
+    .connections path {
+      fill: none; stroke: var(--border); stroke-width: 1.5;
+      transition: stroke 0.25s, stroke-width 0.25s, opacity 0.25s;
+    }
+    .connections path.sindri-flow { stroke: var(--sindri); stroke-opacity: 0.3; stroke-dasharray: 6 4; }
+    .connections path.highlighted { stroke: var(--agent); stroke-width: 2.5; stroke-opacity: 1; stroke-dasharray: none; }
+    .connections path.dimmed { opacity: 0.08; }
+    .connections marker { overflow: visible; }
+
+    /* ─── REPO BOUNDARY BOXES ─── */
+    .repo-boundary {
+      position: relative; z-index: 2;
+      border-radius: 14px; padding: 16px 14px 14px;
+      margin-bottom: 24px;
+    }
+    .repo-boundary.pipeline {
+      background: var(--pipeline-repo-bg);
+      border: 1.5px dashed var(--pipeline-repo-border);
+    }
+    .repo-boundary.submodule {
+      background: var(--submodule-bg);
+      border: 1.5px dashed var(--submodule-border);
+    }
+    .repo-label {
+      position: absolute; top: -10px; left: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 600; letter-spacing: 0.04em;
+      padding: 2px 10px; border-radius: 4px;
+      background: var(--bg);
+    }
+    .repo-boundary.pipeline .repo-label { color: var(--pipeline-repo); border: 1px solid var(--pipeline-repo-border); }
+    .repo-boundary.submodule .repo-label { color: var(--submodule); border: 1px solid var(--submodule-border); }
+
+    /* ─── PHASE LANES ─── */
+    .phase-lane { position: relative; z-index: 2; margin-bottom: 8px; }
+    .phase-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 10px; padding-left: 4px;
+    }
+    .phase-label {
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-faint);
+    }
+    .phase-line { flex: 1; height: 1px; background: var(--divider); }
+    .phase-row { display: flex; gap: 14px; flex-wrap: wrap; }
+
+    /* ─── ASYNC DIVIDER ─── */
+    .async-divider {
+      position: relative; z-index: 2;
+      display: flex; align-items: center; gap: 12px;
+      margin: 20px 0; padding: 0 4px;
+    }
+    .async-divider::before, .async-divider::after {
+      content: ''; flex: 1; height: 1px;
+      background: repeating-linear-gradient(90deg, var(--text-faint) 0, var(--text-faint) 4px, transparent 4px, transparent 8px);
+    }
+    .async-divider span {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-faint); white-space: nowrap;
+      padding: 4px 12px; border-radius: 20px;
+      background: var(--surface-2); border: 1px solid var(--divider);
+    }
+
+    /* ─── WORK UNIT NODES ─── */
+    .wu-node {
+      position: relative;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      min-width: 180px; max-width: 240px; flex: 1;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: all var(--transition);
+    }
+    .wu-node:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+    .wu-node.active { box-shadow: 0 0 0 3px var(--agent-glow), var(--shadow-md); }
+    .wu-node.dimmed { opacity: 0.2; }
+
+    .wu-node.agent { border-left: 3.5px solid var(--agent); }
+    .wu-node.agent:hover { border-color: var(--agent); }
+    .wu-node.agent.active { border-color: var(--agent); box-shadow: 0 0 0 3px var(--agent-glow), var(--shadow-md); }
+
+    .wu-node.script { border-left: 3.5px solid var(--script); }
+    .wu-node.script:hover { border-color: var(--script); }
+    .wu-node.script.active { border-color: var(--script); box-shadow: 0 0 0 3px var(--script-glow), var(--shadow-md); }
+
+    .wu-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+    .wu-left { display: flex; align-items: center; gap: 6px; }
+    .wu-number {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 600;
+      padding: 1px 5px; border-radius: 3px; white-space: nowrap;
+    }
+    .wu-node.agent .wu-number { background: var(--agent-bg); color: var(--agent); }
+    .wu-node.script .wu-number { background: var(--script-bg); color: var(--script); }
+
+    .wu-type-badge {
+      font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      padding: 1px 5px; border-radius: 3px;
+    }
+    .wu-node.agent .wu-type-badge { color: var(--agent); background: var(--agent-bg); }
+    .wu-node.script .wu-type-badge { color: var(--script); background: var(--script-bg); }
+
+    .wu-name { font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--text); letter-spacing: -0.01em; }
+    .wu-data {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; color: var(--text-muted); margin-top: 5px;
+      display: flex; flex-wrap: wrap; gap: 3px;
+    }
+    .wu-data code {
+      background: var(--surface-2); padding: 1px 4px; border-radius: 3px;
+      font-size: 9.5px;
+    }
+    .wu-badges { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+    .wu-badge-rhodes {
+      font-size: 8px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      padding: 1px 5px; border-radius: 3px;
+    }
+    .wu-badge-rhodes.yes { background: var(--script-bg); color: var(--rhodes); }
+    .wu-badge-rhodes.no { background: var(--surface-2); color: var(--text-faint); }
+    .wu-badge-file {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px; font-weight: 500;
+      padding: 1px 5px; border-radius: 3px;
+      background: var(--surface-2); color: var(--text-faint);
+    }
+
+    /* ─── DATA LAYER BAR ─── */
+    .data-layers {
+      display: flex; gap: 20px;
+      padding: 14px 20px; margin-top: 16px;
+      border-radius: var(--radius);
+      background: var(--surface);
+      border: 1px solid var(--border-light);
+    }
+    .data-layer {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 500;
+    }
+    .data-layer-icon {
+      width: 28px; height: 28px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700;
+    }
+    .data-layer-icon.sindri { background: rgba(0, 100, 148, 0.1); color: var(--sindri); }
+    .data-layer-icon.rhodes { background: rgba(150, 66, 25, 0.1); color: var(--rhodes); }
+    .data-layer-label { font-weight: 600; color: var(--text); }
+    .data-layer-desc { font-size: 11px; color: var(--text-muted); }
+
+    /* ─── DETAIL PANEL ─── */
+    .detail-panel {
+      position: fixed; top: 0; right: -440px; width: 420px; height: 100vh;
+      background: var(--surface); border-left: 1px solid var(--border);
+      box-shadow: var(--shadow-lg); z-index: 200;
+      transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      overflow-y: auto; padding: 24px;
+    }
+    .detail-panel.open { right: 0; }
+    .detail-close {
+      position: absolute; top: 16px; right: 16px;
+      width: 28px; height: 28px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text-muted);
+      font-size: 16px; transition: all var(--transition);
+    }
+    .detail-close:hover { background: var(--surface-2); color: var(--text); }
+    .detail-panel h2 { font-size: 17px; font-weight: 700; margin-bottom: 2px; padding-right: 40px; }
+    .detail-panel .detail-type {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: 16px;
+    }
+    .detail-panel .detail-type.agent { color: var(--agent); }
+    .detail-panel .detail-type.script { color: var(--script); }
+    .detail-section { margin-bottom: 14px; }
+    .detail-section h3 {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-faint); margin-bottom: 5px;
+    }
+    .detail-section p, .detail-section li { font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+    .detail-section ul { padding-left: 16px; }
+    .detail-section li { margin-bottom: 3px; }
+    .detail-section code {
+      font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+      background: var(--surface-2); padding: 1px 5px; border-radius: 3px;
+    }
+    .detail-deps { display: flex; flex-wrap: wrap; gap: 5px; }
+    .detail-dep-tag {
+      font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+      padding: 3px 8px; border-radius: 4px;
+      background: var(--surface-2); color: var(--text-muted);
+      cursor: pointer; border: 1px solid var(--divider);
+      transition: all var(--transition);
+    }
+    .detail-dep-tag:hover { background: var(--agent-bg); border-color: var(--agent); color: var(--agent); }
+    .detail-repo-tag {
+      display: inline-block; font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; padding: 2px 8px; border-radius: 4px; margin-top: 2px;
+    }
+    .detail-repo-tag.pipeline { background: var(--pipeline-repo-bg); color: var(--pipeline-repo); border: 1px solid var(--pipeline-repo-border); }
+    .detail-repo-tag.submodule { background: var(--submodule-bg); color: var(--submodule); border: 1px solid var(--submodule-border); }
+
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.2);
+      z-index: 150; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    }
+    .overlay.open { opacity: 1; pointer-events: auto; }
+
+    @media (max-width: 768px) {
+      .header { padding: 12px 16px; }
+      .legend { display: none; }
+      .canvas-wrap { padding: 20px 12px 40px; }
+      .detail-panel { width: 100%; right: -100%; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-left">
+    <h1>Alpha DD Pipeline</h1>
+    <span class="header-badge">14 Work Units &middot; 7 Agents &middot; 7 Scripts</span>
+  </div>
+  <div class="header-right">
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot agent"></div>Agent (Skill)</div>
+      <div class="legend-item"><div class="legend-dot script"></div>Script (TS)</div>
+      <div class="legend-item"><div class="legend-line sindri"></div>Sindri</div>
+      <div class="legend-item"><div class="legend-line rhodes"></div>RHODES</div>
+    </div>
+    <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="canvas-wrap">
+  <div class="canvas" id="canvas">
+
+    <!-- ═══ PHASE 1: INTAKE ═══ -->
+    <div class="repo-boundary pipeline">
+      <div class="repo-label">alpha-dd-pipeline &mdash; scripts/</div>
+      <div class="phase-lane">
+        <div class="phase-header"><span class="phase-label">Phase 1 &mdash; Intake</span><div class="phase-line"></div></div>
+        <div class="phase-row">
+          <div class="wu-node script" data-wu="01">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-01</span><span class="wu-type-badge">Script</span></div>
+            </div>
+            <div class="wu-name">New Site Intake</div>
+            <div class="wu-data"><code>site_meta</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes yes">RHODES</span>
+              <span class="wu-badge-file">scripts/wu-01/intake.ts</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PHASE 2: PARALLEL RESEARCH ═══ -->
+    <!-- Split across two repo boundaries -->
+    <div class="phase-lane">
+      <div class="phase-header"><span class="phase-label">Phase 2 &mdash; Parallel Research</span><div class="phase-line"></div></div>
+      <div class="phase-row">
+
+        <!-- Submodule agents -->
+        <div class="repo-boundary submodule" style="display:flex; gap:14px; padding:22px 14px 14px; flex: 2; min-width: 0;">
+          <div class="repo-label">skills/ops-skills/ (submodule &rarr; Ops-Skills)</div>
+          <div class="wu-node agent" data-wu="02" style="flex:1;">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-02</span><span class="wu-type-badge">Agent</span></div>
+            </div>
+            <div class="wu-name">AI SIR Generation</div>
+            <div class="wu-data"><code>sir_ai</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes yes">RHODES</span>
+              <span class="wu-badge-file">ease-of-conversion/</span>
+            </div>
+          </div>
+          <div class="wu-node agent" data-wu="03" style="flex:1;">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-03</span><span class="wu-type-badge">Agent</span></div>
+            </div>
+            <div class="wu-name">School Approval</div>
+            <div class="wu-data"><code>school_approval</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes yes">RHODES</span>
+              <span class="wu-badge-file">school-approval/</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pipeline scripts -->
+        <div class="repo-boundary pipeline" style="display:flex; gap:14px; padding:22px 14px 14px; flex: 2; min-width: 0;">
+          <div class="repo-label">scripts/</div>
+          <div class="wu-node script" data-wu="05" style="flex:1;">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-05</span><span class="wu-type-badge">Script</span></div>
+            </div>
+            <div class="wu-name">Location Presentation</div>
+            <div class="wu-data"><code>presentation_url</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes no">No RHODES</span>
+              <span class="wu-badge-file">wu-05/presentation.ts</span>
+            </div>
+          </div>
+          <div class="wu-node script" data-wu="11" style="flex:1;">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-11</span><span class="wu-type-badge">Script</span></div>
+            </div>
+            <div class="wu-name">Shovels Permit History</div>
+            <div class="wu-data"><code>permit_history</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes yes">RHODES</span>
+              <span class="wu-badge-file">wu-11/shovels.ts</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══ PHASE 3: VENDOR DISPATCH ═══ -->
+    <div class="repo-boundary pipeline">
+      <div class="repo-label">scripts/</div>
+      <div class="phase-lane">
+        <div class="phase-header"><span class="phase-label">Phase 3 &mdash; Vendor Dispatch</span><div class="phase-line"></div></div>
+        <div class="phase-row">
+          <div class="wu-node script" data-wu="04">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-04</span><span class="wu-type-badge">Script</span></div>
+            </div>
+            <div class="wu-name">Vendor Dispatch (CDS + Worksmith)</div>
+            <div class="wu-data"><code>vendor_packets_sent</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes no">No RHODES</span>
+              <span class="wu-badge-file">wu-04/vendor-dispatch.ts</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ ASYNC BOUNDARY ═══ -->
+    <div class="async-divider"><span>Vendor returns arrive async (days / weeks)</span></div>
+
+    <!-- ═══ PHASE 4: VENDOR RETURNS ═══ -->
+    <div class="repo-boundary pipeline">
+      <div class="repo-label">skills/ (pipeline agents)</div>
+      <div class="phase-lane">
+        <div class="phase-header"><span class="phase-label">Phase 4 &mdash; Vendor Returns + ISP</span><div class="phase-line"></div></div>
+        <div class="phase-row">
+          <div class="wu-node agent" data-wu="06">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-06</span><span class="wu-type-badge">Agent</span></div>
+            </div>
+            <div class="wu-name">CDS Verification Extraction</div>
+            <div class="wu-data"><code>sir_vendor</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes yes">RHODES</span>
+              <span class="wu-badge-file">cds-verification-extraction/</span>
+            </div>
+          </div>
+          <div class="wu-node agent" data-wu="07">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-07</span><span class="wu-type-badge">Agent</span></div>
+            </div>
+            <div class="wu-name">Vendor BI Extraction</div>
+            <div class="wu-data"><code>inspection_vendor</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes yes">RHODES</span>
+              <span class="wu-badge-file">vendor-bi-extraction/</span>
+            </div>
+          </div>
+          <div class="wu-node agent" data-wu="08">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-08</span><span class="wu-type-badge">Agent</span></div>
+            </div>
+            <div class="wu-name">ISP Extraction</div>
+            <div class="wu-data"><code>isp_extract</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes yes">RHODES</span>
+              <span class="wu-badge-file">isp-extraction/</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PHASE 5: DELTA + COST ═══ -->
+    <div class="repo-boundary pipeline">
+      <div class="repo-label">scripts/</div>
+      <div class="phase-lane">
+        <div class="phase-header"><span class="phase-label">Phase 5 &mdash; Delta + Cost Processing</span><div class="phase-line"></div></div>
+        <div class="phase-row">
+          <div class="wu-node script" data-wu="09">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-09</span><span class="wu-type-badge">Script</span></div>
+            </div>
+            <div class="wu-name">Delta Computation</div>
+            <div class="wu-data"><code>sir_delta</code> <code>inspection_delta</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes no">Optional QA</span>
+              <span class="wu-badge-file">wu-09/delta.ts</span>
+            </div>
+          </div>
+          <div class="wu-node script" data-wu="10">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-10</span><span class="wu-type-badge">Script</span></div>
+            </div>
+            <div class="wu-name">RayCon Cost Estimates</div>
+            <div class="wu-data"><code>cost_estimates</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes yes">RHODES</span>
+              <span class="wu-badge-file">wu-10/raycon.ts</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PHASE 6: PLAN + REPORT ═══ -->
+    <div class="repo-boundary pipeline">
+      <div class="repo-label">skills/ (pipeline agents)</div>
+      <div class="phase-lane">
+        <div class="phase-header"><span class="phase-label">Phase 6 &mdash; Plan + Report Assembly</span><div class="phase-line"></div></div>
+        <div class="phase-row">
+          <div class="wu-node agent" data-wu="12">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-12</span><span class="wu-type-badge">Agent</span></div>
+            </div>
+            <div class="wu-name">Opening Plan v2</div>
+            <div class="wu-data"><code>opening_plan</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes yes">RHODES</span>
+              <span class="wu-badge-file">opening-plan-v2/</span>
+            </div>
+          </div>
+          <div class="wu-node agent" data-wu="13">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-13</span><span class="wu-type-badge">Agent</span></div>
+            </div>
+            <div class="wu-name">DD Report Assembly</div>
+            <div class="wu-data"><code>dd_report</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes yes">RHODES</span>
+              <span class="wu-badge-file">dd-report-assembly/</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PHASE 7: DISTRIBUTION ═══ -->
+    <div class="repo-boundary pipeline">
+      <div class="repo-label">scripts/</div>
+      <div class="phase-lane">
+        <div class="phase-header"><span class="phase-label">Phase 7 &mdash; Distribution</span><div class="phase-line"></div></div>
+        <div class="phase-row">
+          <div class="wu-node script" data-wu="14">
+            <div class="wu-top">
+              <div class="wu-left"><span class="wu-number">WU-14</span><span class="wu-type-badge">Script</span></div>
+            </div>
+            <div class="wu-name">Report Distribution</div>
+            <div class="wu-data"><code>distribution_log</code></div>
+            <div class="wu-badges">
+              <span class="wu-badge-rhodes no">No RHODES</span>
+              <span class="wu-badge-file">wu-14/distribution.ts</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ DATA LAYERS ═══ -->
+    <div class="data-layers">
+      <div class="data-layer">
+        <div class="data-layer-icon sindri">S</div>
+        <div>
+          <div class="data-layer-label">Sindri</div>
+          <div class="data-layer-desc">Pipeline data layer &mdash; typed records between WUs</div>
+        </div>
+      </div>
+      <div class="data-layer">
+        <div class="data-layer-icon rhodes">R</div>
+        <div>
+          <div class="data-layer-label">RHODES</div>
+          <div class="data-layer-desc">Business data layer &mdash; long-term storage, cross-team access</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SVG connections drawn by JS -->
+    <svg class="connections" id="connections"></svg>
+  </div>
+</div>
+
+<!-- DETAIL PANEL -->
+<div class="overlay" id="overlay"></div>
+<div class="detail-panel" id="detailPanel">
+  <button class="detail-close" id="detailClose">&times;</button>
+  <h2 id="detailTitle"></h2>
+  <div class="detail-type" id="detailType"></div>
+  <div id="detailContent"></div>
+</div>
+
+<script>
+const wuDetails = {
+  '01': {
+    name: 'New Site Intake', type: 'script',
+    purpose: 'Parse a New Site email and stand up the site record. Creates Drive folder structure and LOI doc. Everything downstream reads from site_meta.',
+    trigger: 'New Site email received (LOI attachment)',
+    sindriOut: 'site_meta', rhodesWrite: 'Yes — site record',
+    connectors: ['Gmail', 'RHODES', 'Google Drive'],
+    deps: [], downstream: ['02','03','05','11'],
+    file: 'scripts/wu-01/intake.ts', repo: 'pipeline',
+    keyFields: ['site_id','address','city','state','school_type','drive_folder_url','loi_doc_url','stage']
+  },
+  '02': {
+    name: 'AI SIR Generation', type: 'agent',
+    purpose: 'Run the ease-of-conversion skill to produce a full AI Site Investigation Report with jurisdiction research, code analysis, and feasibility scoring.',
+    trigger: 'WU-01 complete (site_meta exists)',
+    sindriOut: 'sir_ai', rhodesWrite: 'Yes — long-term SIR record',
+    connectors: ['Google Drive'],
+    deps: ['01'], downstream: ['04','12'],
+    file: 'skills/ops-skills/ease-of-conversion/', repo: 'submodule',
+    keyFields: ['report_url','e_occupancy_score','recommendation','sir_sections']
+  },
+  '03': {
+    name: 'School Approval', type: 'agent',
+    purpose: 'Score the address for education approval difficulty. Rates how hard it is to legally operate a private K-8 school by state. Feeds Opening Plan (WU-12) as pre-enriched edu regulatory baseline.',
+    trigger: 'WU-01 complete (site_meta exists)',
+    sindriOut: 'school_approval', rhodesWrite: 'Yes — regulatory record',
+    connectors: [],
+    deps: ['01'], downstream: ['12','13'],
+    file: 'skills/ops-skills/school-approval/', repo: 'submodule',
+    keyFields: ['approval_difficulty','state_rating','archetype','gating_before_open','calendar_window','ease_score_0_10']
+  },
+  '04': {
+    name: 'Vendor Dispatch', type: 'script',
+    purpose: 'CDS gets the full SIR with verification columns for B/C claims. Worksmith gets a pre-filled inspection checklist. Both packets go out via email with Drive-hosted docs.',
+    trigger: 'WU-02 complete (sir_ai exists)',
+    sindriOut: 'vendor_packets_sent', rhodesWrite: 'No — transient status',
+    connectors: ['Gmail (SES)', 'Google Drive'],
+    deps: ['02'], downstream: ['06','07'],
+    file: 'scripts/wu-04/vendor-dispatch.ts', repo: 'pipeline',
+    keyFields: ['cds_report_url','cds_bc_item_count','worksmith_checklist_url','worksmith_prefill_count']
+  },
+  '05': {
+    name: 'Location Presentation', type: 'script',
+    purpose: '9-slide Google Slides deck with enrollment scores, wealth data, and map imagery.',
+    trigger: 'WU-01 complete (site_meta exists)',
+    sindriOut: 'presentation_url', rhodesWrite: 'No — artefact only',
+    connectors: ['Google Slides', 'Google Drive'],
+    deps: ['01'], downstream: [],
+    file: 'scripts/wu-05/presentation.ts', repo: 'pipeline',
+    keyFields: ['presentation_url']
+  },
+  '06': {
+    name: 'CDS Verification Extraction', type: 'agent',
+    purpose: 'Read the CDS verification report returned via email. Extract verified findings, corrections, and source citations using claim-id matching against the outbound packet.',
+    trigger: 'CDS email return arrives',
+    sindriOut: 'sir_vendor', rhodesWrite: 'Yes — vendor data',
+    connectors: ['Gmail', 'Google Drive'],
+    deps: ['04'], downstream: ['09','12'],
+    file: 'skills/cds-verification-extraction/', repo: 'pipeline',
+    keyFields: ['verification_summary','verified_items[]','claim-id matching']
+  },
+  '07': {
+    name: 'Vendor BI Extraction', type: 'agent',
+    purpose: 'Read the completed Worksmith inspection checklist. Extract 11-section findings, deal-killer flags, cost estimates, and deficiency summaries.',
+    trigger: 'Worksmith email return arrives',
+    sindriOut: 'inspection_vendor', rhodesWrite: 'Yes — vendor data',
+    connectors: ['Gmail', 'Google Drive'],
+    deps: ['04'], downstream: ['09','10','12'],
+    file: 'skills/vendor-bi-extraction/', repo: 'pipeline',
+    keyFields: ['deal_killer_flags','11 inspection sections','cost_estimates[]','deficiency_summary']
+  },
+  '08': {
+    name: 'ISP Extraction', type: 'agent',
+    purpose: 'Extract structured data from an Interior Space Plan PDF — capacity analysis, classroom assignments, room/door schedules, ADA pre-check, IBC compliance.',
+    trigger: 'ISP document uploaded to Drive',
+    sindriOut: 'isp_extract', rhodesWrite: 'Yes — capacity data',
+    connectors: ['Google Drive'],
+    deps: [], downstream: ['10','13'],
+    file: 'skills/isp-extraction/', repo: 'pipeline',
+    keyFields: ['capacity_analysis','classroom_assignments[]','room_schedule[]','door_schedule[]','ada_pre_check']
+  },
+  '09': {
+    name: 'Delta Computation', type: 'script',
+    purpose: 'Generic flatten-and-compare engine. Diffs AI predictions against vendor findings using claim-id matching. Computes accuracy scores for the QA feedback loop.',
+    trigger: 'AI + vendor pair exists for SIR or inspection',
+    sindriOut: 'sir_delta, inspection_delta', rhodesWrite: 'Optional — QA metric',
+    connectors: [],
+    deps: ['06','07'], downstream: ['13'],
+    file: 'scripts/wu-09/delta.ts', repo: 'pipeline',
+    keyFields: ['confirmed_count','corrected_count','new_finding_count','accuracy_score']
+  },
+  '10': {
+    name: 'RayCon Cost Estimates', type: 'script',
+    purpose: 'Combine ISP capacity data with inspection findings to generate construction cost estimates by trade using RayCon rate tables.',
+    trigger: 'ISP + inspection data ready',
+    sindriOut: 'cost_estimates', rhodesWrite: 'Yes — cost data',
+    connectors: [],
+    deps: ['08','07'], downstream: ['12'],
+    file: 'scripts/wu-10/raycon.ts', repo: 'pipeline',
+    keyFields: ['estimates_by_trade[]','total_low','total_high','contingency']
+  },
+  '11': {
+    name: 'Shovels Permit History', type: 'script',
+    purpose: 'Pull historical permit data for the property from the Shovels API. Zero permits is a valid result — the absence of history is itself useful.',
+    trigger: 'WU-01 complete (site_meta exists)',
+    sindriOut: 'permit_history', rhodesWrite: 'Yes — permit data',
+    connectors: ['Shovels API'],
+    deps: ['01'], downstream: ['13'],
+    file: 'scripts/wu-11/shovels.ts', repo: 'pipeline',
+    keyFields: ['permits[]','total_construction_value','most_recent_permit']
+  },
+  '12': {
+    name: 'Opening Plan v2', type: 'agent',
+    purpose: 'Two-pass permitting plan. Pass 1: deterministic SIR baseline. Pass 2: 5 parallel research agents (Zoning, Building, Health/Edu Regulatory, Fire, ADA/HVAC) enrich with primary-source citations and cunning-path strategies. Agent 3 uses school-approval (WU-03) as its education regulatory baseline.',
+    trigger: 'SIR + school-approval + inspection + costs all ready',
+    sindriOut: 'opening_plan', rhodesWrite: 'Yes — decision doc',
+    connectors: ['Google Drive', 'Google Docs'],
+    deps: ['02','03','10','06','07'], downstream: ['13'],
+    file: 'skills/opening-plan-v2/', repo: 'pipeline',
+    keyFields: ['recommendation','best_case_date','realistic_date','worst_case_date','gating_factors[]','hvac_ventilation_delta','hazmat_gate_status']
+  },
+  '13': {
+    name: 'DD Report Assembly', type: 'agent',
+    purpose: 'Assemble the full Due Diligence Report from all upstream Sindri data. Reads pre-existing documents — does not run skills. Dual-column format for AI vs vendor comparison. Produces "can we open?" recommendation with the recommended path.',
+    trigger: 'Minimum data threshold met',
+    sindriOut: 'dd_report', rhodesWrite: 'Yes — report record',
+    connectors: ['Google Drive', 'Google Docs'],
+    deps: ['12','09','08','03','11'], downstream: ['14'],
+    file: 'skills/dd-report-assembly/', repo: 'pipeline',
+    keyFields: ['report_url','can_we_open','recommended_path','total_cost_range']
+  },
+  '14': {
+    name: 'Report Distribution', type: 'script',
+    purpose: 'Distribute the completed DD Report to stakeholders via email and update the site stage in RHODES.',
+    trigger: 'WU-13 complete (dd_report exists)',
+    sindriOut: 'distribution_log', rhodesWrite: 'No — transient',
+    connectors: ['Gmail (SES)', 'RHODES'],
+    deps: ['13'], downstream: [],
+    file: 'scripts/wu-14/distribution.ts', repo: 'pipeline',
+    keyFields: ['recipients[]','sent_at','report_url']
+  }
+};
+
+// ─── Connection drawing ───
+const edges = [
+  ['01','02'],['01','03'],['01','05'],['01','11'],
+  ['02','04'],
+  ['04','06'],['04','07'],
+  ['06','09'],['07','09'],
+  ['08','10'],['07','10'],
+  ['02','12'],['03','12'],['10','12'],['06','12'],['07','12'],
+  ['12','13'],['09','13'],['08','13'],['03','13'],['11','13'],
+  ['13','14']
+];
+
+function getNodeCenter(wu) {
+  const el = document.querySelector(`[data-wu="${wu}"]`);
+  if (!el) return null;
+  const canvas = document.getElementById('canvas');
+  const cr = canvas.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  return {
+    x: r.left + r.width / 2 - cr.left,
+    yTop: r.top - cr.top,
+    yBot: r.bottom - cr.top,
+    left: r.left - cr.left,
+    right: r.right - cr.left
+  };
+}
+
+function drawConnections() {
+  const svg = document.getElementById('connections');
+  const canvas = document.getElementById('canvas');
+  svg.setAttribute('width', canvas.scrollWidth);
+  svg.setAttribute('height', canvas.scrollHeight);
+  svg.style.width = canvas.scrollWidth + 'px';
+  svg.style.height = canvas.scrollHeight + 'px';
+
+  let paths = '';
+  edges.forEach(([from, to]) => {
+    const a = getNodeCenter(from);
+    const b = getNodeCenter(to);
+    if (!a || !b) return;
+
+    const x1 = a.x, y1 = a.yBot;
+    const x2 = b.x, y2 = b.yTop;
+    const midY = y1 + (y2 - y1) * 0.45;
+    const d = `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`;
+    paths += `<path class="sindri-flow" d="${d}" data-from="${from}" data-to="${to}"/>`;
+  });
+
+  svg.innerHTML = paths;
+}
+
+// ─── Highlight ───
+function highlightNode(wu) {
+  const d = wuDetails[wu];
+  if (!d) return;
+  const related = new Set([wu, ...d.deps, ...d.downstream]);
+
+  document.querySelectorAll('.wu-node').forEach(n => {
+    if (related.has(n.dataset.wu)) {
+      n.classList.remove('dimmed');
+      if (n.dataset.wu === wu) n.classList.add('active');
+    } else {
+      n.classList.add('dimmed');
+    }
+  });
+
+  document.querySelectorAll('.connections path').forEach(p => {
+    if (p.dataset.from === wu || p.dataset.to === wu) {
+      p.classList.add('highlighted');
+      p.classList.remove('dimmed');
+    } else {
+      p.classList.add('dimmed');
+      p.classList.remove('highlighted');
+    }
+  });
+}
+
+function clearHighlight() {
+  document.querySelectorAll('.wu-node').forEach(n => n.classList.remove('dimmed','active'));
+  document.querySelectorAll('.connections path').forEach(p => p.classList.remove('highlighted','dimmed'));
+}
+
+// ─── Detail panel ───
+function showDetail(wu) {
+  const d = wuDetails[wu];
+  if (!d) return;
+
+  document.getElementById('detailTitle').textContent = `WU-${wu}: ${d.name}`;
+  const typeEl = document.getElementById('detailType');
+  typeEl.textContent = d.type === 'agent' ? 'Agent (SKILL.md)' : 'Script (TypeScript)';
+  typeEl.className = 'detail-type ' + d.type;
+
+  let html = '';
+  html += `<div class="detail-section"><h3>Purpose</h3><p>${d.purpose}</p></div>`;
+  html += `<div class="detail-section"><h3>Trigger</h3><p>${d.trigger}</p></div>`;
+  html += `<div class="detail-section"><h3>Sindri Output</h3><p><code>${d.sindriOut}</code></p></div>`;
+  html += `<div class="detail-section"><h3>RHODES</h3><p>${d.rhodesWrite}</p></div>`;
+  html += `<div class="detail-section"><h3>File</h3><p><code>${d.file}</code></p>`;
+  html += `<div class="detail-repo-tag ${d.repo}">${d.repo === 'submodule' ? 'Ops-Skills (submodule)' : 'alpha-dd-pipeline'}</div></div>`;
+
+  if (d.connectors.length) {
+    html += `<div class="detail-section"><h3>Connectors</h3><p>${d.connectors.join(', ')}</p></div>`;
+  }
+
+  if (d.keyFields.length) {
+    html += `<div class="detail-section"><h3>Key Output Fields</h3><ul>`;
+    d.keyFields.forEach(f => { html += `<li><code>${f}</code></li>`; });
+    html += `</ul></div>`;
+  }
+
+  if (d.deps.length) {
+    html += `<div class="detail-section"><h3>Depends On</h3><div class="detail-deps">`;
+    d.deps.forEach(dep => {
+      const dn = wuDetails[dep];
+      html += `<button class="detail-dep-tag" data-nav="${dep}">WU-${dep} ${dn ? dn.name : ''}</button>`;
+    });
+    html += `</div></div>`;
+  }
+
+  if (d.downstream.length) {
+    html += `<div class="detail-section"><h3>Feeds Into</h3><div class="detail-deps">`;
+    d.downstream.forEach(ds => {
+      const dn = wuDetails[ds];
+      html += `<button class="detail-dep-tag" data-nav="${ds}">WU-${ds} ${dn ? dn.name : ''}</button>`;
+    });
+    html += `</div></div>`;
+  }
+
+  document.getElementById('detailContent').innerHTML = html;
+
+  document.querySelectorAll('.detail-dep-tag').forEach(btn => {
+    btn.addEventListener('click', () => {
+      clearHighlight();
+      highlightNode(btn.dataset.nav);
+      showDetail(btn.dataset.nav);
+      document.querySelector(`[data-wu="${btn.dataset.nav}"]`)?.scrollIntoView({ behavior:'smooth', block:'center' });
+    });
+  });
+
+  document.getElementById('detailPanel').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+  highlightNode(wu);
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+  clearHighlight();
+}
+
+// ─── Events ───
+document.querySelectorAll('.wu-node').forEach(node => {
+  node.addEventListener('click', () => showDetail(node.dataset.wu));
+});
+document.getElementById('detailClose').addEventListener('click', closeDetail);
+document.getElementById('overlay').addEventListener('click', closeDetail);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+
+// ─── Theme ───
+(function(){
+  const t = document.querySelector('[data-theme-toggle]');
+  const r = document.documentElement;
+  let d = matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
+  r.setAttribute('data-theme', d);
+  t && t.addEventListener('click', () => {
+    d = d === 'dark' ? 'light' : 'dark';
+    r.setAttribute('data-theme', d);
+    setTimeout(drawConnections, 50);
+  });
+})();
+
+// ─── Init ───
+window.addEventListener('load', () => setTimeout(drawConnections, 120));
+window.addEventListener('resize', drawConnections);
+</script>
+
+</body>
+</html>
