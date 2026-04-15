@@ -1,0 +1,3 @@
+[submodule "skills/ops-skills"]
+	path = skills/ops-skills
+	url = https://github.com/EDU-Ops-Team/Ops-Skills.git
