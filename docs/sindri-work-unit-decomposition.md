@@ -19,7 +19,7 @@ The DD pipeline breaks into 14 work units. 5 are agent skills (Claude reads docu
 | 01 | New Site Intake | Script | New Site email | `site_meta` | Yes — site record |
 | 02 | AI SIR Generation | Agent | WU-01 done | `sir_ai` | Yes — long-term SIR record |
 | 03 | School Approval | Agent | WU-01 done | `school_approval` | Yes — regulatory record |
-| 04 | Vendor Packet Dispatch | Script | WU-02 done | `vendor_packets_sent` | No — transient status |
+| 04 | Vendor Dispatch (CDS + Worksmith) | Script | WU-02 done | `vendor_packets_sent` | No — transient status |
 | 05 | Location Presentation | Script | WU-01 done | `presentation_url` | No — artefact only |
 | 06 | Vendor SIR Extraction | Agent | CDS email arrives | `sir_vendor` | Yes — vendor data |
 | 07 | Vendor BI Extraction | Agent | Worksmith email arrives | `inspection_vendor` | Yes — vendor data |
@@ -130,9 +130,9 @@ The DD pipeline breaks into 14 work units. 5 are agent skills (Claude reads docu
 
 ---
 
-### SCRIPT-04: Vendor Packet Dispatch
+### SCRIPT-04: Vendor Dispatch
 
-**Purpose:** Package the AI SIR output into vendor-ready packets and email them to CDS (for SIR verification) and Worksmith (for building inspection).
+**Purpose:** Apply vendor-specific overlays to the full AI SIR report and dispatch to both CDS (phone verification) and Worksmith (field inspection). Each vendor gets the complete report with their own overlay format — CDS gets verification columns for B/C claims; Worksmith gets an inspection checklist overlay for D-confidence field items plus pre-filled findings they confirm or correct on-site.
 
 **Invoking Event:** `UpstreamCompleted` from WU-02 (AI SIR complete)
 
@@ -148,10 +148,13 @@ The DD pipeline breaks into 14 work units. 5 are agent skills (Claude reads docu
   "vendor_packets_sent": {
     "cds_email_sent_at": "ISO timestamp",
     "cds_recipient": "string",
-    "cds_packet_url": "string — Drive URL of the vendor packet",
+    "cds_report_url": "string — Drive URL of the CDS verification report (full SIR + overlay)",
+    "cds_bc_item_count": "integer — number of B/C items CDS needs to verify",
     "worksmith_email_sent_at": "ISO timestamp",
     "worksmith_recipient": "string",
-    "worksmith_packet_url": "string — Drive URL of the inspection brief"
+    "worksmith_report_url": "string — Drive URL of the Worksmith inspection report (full SIR + inspection overlay)",
+    "worksmith_checklist_item_count": "integer — number of inspection checklist items",
+    "worksmith_prefill_item_count": "integer — number of AI pre-filled findings for field confirmation"
   }
 }
 ```
@@ -162,23 +165,109 @@ The DD pipeline breaks into 14 work units. 5 are agent skills (Claude reads docu
 ```
 1. Read sir_ai from Sindri (structured extraction from WU-02)
 2. Read site_meta from Sindri (address, drive folder URL)
-3. Generate CDS vendor packet:
-   a. Apply ease-of-conversion Mode 2 transformation rules:
-      - Confidence A items → keep as-is
-      - Confidence B/C items → rewrite as "AI found: [value] — please verify"
-      - Add empty Source column for vendor to fill
-      - Confidence D items → pass through as vendor task cards
-   b. Prepend cover note with instructions
-   c. Save to Drive → M2 folder
-4. Generate Worksmith inspection brief:
-   a. Site address, school type, building facts from sir_ai
-   b. Pre-filled checklist from sir_ai Phase 7 unknowns
-   c. Save to Drive → M2 folder
-5. Send CDS email with packet attached
-6. Send Worksmith email with brief attached
-7. Write vendor_packets_sent to Sindri
-8. Signal completion
+3. Read the full AI SIR markdown from Drive (report_url in sir_ai)
+
+--- CDS Verification Report (unchanged from prior spec) ---
+4. Generate CDS Verification Report:
+   a. Scan all tables for B/C confidence rows → build Verification Task Summary table
+      - Group by authority (batch calls)
+      - Pull contact info from the Authority Chain section
+      - Number sequentially
+   b. Add 3 columns to every B/C row in the report body:
+      "CDS Verified Finding" | "CDS Source" | "CDS Confidence" (all empty)
+   c. Embed claim-id HTML comments after each B/C row
+   d. Prepend cover sheet + instructions + Verification Task Summary
+   e. A-confidence rows and D-confidence task cards: unchanged
+   f. Save to Drive → M2 folder as {address}_cds-verification.md
+
+--- Worksmith Inspection Report (full SIR + inspection overlay) ---
+5. Generate Worksmith Inspection Report:
+   a. Build the Inspection Header block:
+      - Property Address, Target Occupancy (E — Private K-8),
+        Planned Student Count, Planned Staff Count,
+        Building Sq. Footage, Current Occupancy Type
+      (all from sir_ai site facts and Phase 7)
+   b. Build the Deal-Killer Questions section:
+      - 5 binary questions from SIR critical vendor tasks:
+        1. Is there a safe parent drop-off/pick-up area with no backing onto arterial roads?
+        2. Are there at least 2 exits from the student-occupied space with adequate separation?
+        3. Can all exit doors open outward with panic hardware?
+        4. Is the building free from obvious structural deficiency (sagging floors, major cracks, settling)?
+        5. Is the building free from visible mold, significant water damage, or active leaks?
+      - Each has: Yes / No / Needs Further Evaluation
+      - NOTE: If ANY answer is No → call Alpha contact immediately. Do not continue inspection.
+   c. Build the Inspection Priority Map:
+      - Pull D-confidence items from SIR Phase 7 and vendor task cards
+      - Classify as RED (deal-killers), YELLOW (budget/timeline impact), GREEN (confirm-and-go)
+      - This tells the inspector what to focus on and why
+   d. Build the 11-Section Inspection Checklist overlay:
+      For each of the 11 template sections (Exterior/Site, Parking/Drop-off,
+      Entry/Egress, Fire Alarm, Sprinkler, Emergency Systems,
+      Restrooms/Plumbing, ADA, Structural, HVAC/Mechanical, Electrical):
+        i.  Pull every checklist line item from the standard template
+        ii. For items where the SIR has a finding (any confidence level):
+            - Pre-fill the "AI Pre-Fill" column with the SIR value
+            - Embed a claim-id HTML comment for round-trip matching
+        iii. Table format per section:
+             | Item | AI Pre-Fill | Confirmed ☐ | Finding | Source/Citation | Notes |
+        iv.  After each section table, include contextual NOTE boxes where
+             the template has them (e.g., fire alarm cost/timeline note,
+             59-student bathroom threshold, E-occupancy ventilation rates)
+   e. Append the Occupant Load Verification section:
+      - Formula 1: Total Occupant Load (Net Floor Area ÷ 100)
+      - Formula 2: Student Capacity (Net Learning Area ÷ 40)
+      - Pre-fill with SIR values if available, mark for inspector verification
+   f. Append the Cost Estimate Format table:
+      - Item | Description | Priority | Low Est. | High Est. | Notes
+      - Pre-populate rows for: Fire Alarm, Egress, ADA, Plumbing, HVAC,
+        Electrical, Structural, Other — values blank for inspector
+   g. Append the Overall Assessment section:
+      - Inspector recommendation checkboxes:
+        ☐ PROCEED — No critical issues identified
+        ☐ PROCEED WITH CAUTION — Issues identified but remediation path exists
+        ☐ REQUIRES JUSTIFICATION — Significant issues, cost/timeline impact high
+        ☐ PASS — Critical issues, not recommended for school use
+      - Inspector signature, date, next inspection date fields
+   h. Prepend cover sheet with instructions:
+      ---
+      **How to use this report**
+
+      This document is the full AI Site Investigation Report for this address
+      with an inspection checklist overlay. Sections 1–8 are the complete
+      SIR — read them to understand the site context, zoning, permits,
+      and what AI research found remotely.
+
+      The Inspection Checklist (Section 9) is your field scope. Each section
+      has a table with an "AI Pre-Fill" column showing what we found remotely.
+      Your job:
+      1. Check the "Confirmed" box if the AI finding is correct
+      2. If incorrect, write the actual finding in the "Finding" column
+      3. Fill in "Source/Citation" for every item you actively verified
+      4. Use the Deal-Killer Questions FIRST — if any answer is No, call us
+      5. Complete the Cost Estimate table for every deficiency found
+      6. Select your overall recommendation
+
+      Do not leave Source/Citation blank on any item you verified.
+      ---
+   i. Save to Drive → M2 folder as {address}_worksmith-inspection.md
+
+6. Send CDS email with CDS verification report link
+7. Send Worksmith email with Worksmith inspection report link
+8. Write vendor_packets_sent to Sindri
+9. Signal completion
 ```
+
+**Key design decision — full-report approach for BOTH vendors:** Both CDS and Worksmith receive the full SIR with vendor-specific overlays instead of stripped-down packets. Benefits:
+- CDS gets context for their phone verification calls
+- Worksmith gets context for their physical inspection — knowing the zoning situation, permit path, and AI feasibility analysis helps them prioritize inspection time
+- Both produce single round-trip documents that AGENT-06 and AGENT-07 can extract from with claim-id matching
+- Eliminates the need to maintain separate brief templates that drift from the SIR structure
+
+**Worksmith overlay vs CDS overlay — key differences:**
+- CDS overlay targets B/C confidence rows (remote claims that need phone verification)
+- Worksmith overlay targets D-confidence items + ALL physical-inspection items from the 11-section template (items that can only be confirmed on-site)
+- Worksmith overlay also pre-fills A/B/C items from the SIR so the inspector can confirm or correct them in the field — this catches remote research errors that phone calls cannot catch
+- Worksmith overlay includes cost estimate tables and occupant load verification — CDS does not
 
 **Error handling:**
 - Email send fails → retry with exponential backoff (max 3 attempts)
@@ -577,26 +666,26 @@ Each agent runs as a Claude Managed Agent with a SKILL.md and supporting files.
 
 ---
 
-### AGENT-06: Vendor SIR Extraction
+### AGENT-06: CDS Verification Extraction
 
-**Purpose:** Read a CDS vendor SIR PDF and extract structured data using the same schema as the AI SIR, enabling field-by-field comparison.
+**Purpose:** Read a completed CDS Verification Report (the full AI SIR with CDS's verification columns filled in) and extract both the original AI findings and CDS's verified findings into the standard SIR schema, producing the `sir_vendor` data for downstream comparison and DD Report assembly.
 
-**Invoking Event:** Email received classified as "CDS SIR Return"
+**Invoking Event:** Email received classified as "CDS Verification Return"
 
-**Subs to Monitor:** Email inbox — classify as CDS vendor return (look for CDS sender, SIR attachment keywords)
+**Subs to Monitor:** Email inbox — classify as CDS return (look for CDS sender, verification report attachment, or reply to the outbound CDS email from WU-04)
 
 **Connectors:** Gmail, Google Drive
 
-**Skill:** `vendor-sir-extraction/SKILL.md` (NEW — needs to be built)
+**Skill:** `cds-verification-extraction/SKILL.md` (NEW — needs to be built)
 
-**Sindri Data In:** `site_meta` (for site matching — address, drive folder)
+**Sindri Data In:** `site_meta` (for site matching), `sir_ai` (for baseline comparison), `vendor_packets_sent` (for CDS report URL matching)
 
 **Sindri Data Out:**
 ```json
 {
   "sir_vendor": {
     "extracted_at": "ISO timestamp",
-    "source_doc_url": "string — Drive URL of the vendor PDF",
+    "source_doc_url": "string — Drive URL of the returned CDS verification report",
     "address": "string",
     "zoning_status": "string",
     "permit_type": "string",
@@ -616,45 +705,91 @@ Each agent runs as a Claude Managed Agent with a SKILL.md and supporting files.
       "bathroom_requirement": "string",
       "construction_scope": ["item1", "item2"]
     },
-    "vendor_notes": "string — free-text notes from the vendor not captured in schema fields"
+    "verification_summary": {
+      "total_bc_items": "integer — how many B/C items were sent to CDS",
+      "verified_count": "integer — how many CDS filled in",
+      "confirmed_count": "integer — CDS agreed with AI finding",
+      "corrected_count": "integer — CDS provided a different finding",
+      "unverified_count": "integer — CDS left blank",
+      "new_findings_count": "integer — CDS added items not in original report"
+    },
+    "verified_items": [
+      {
+        "claim_id": "string — matches the claim-id HTML comment from Mode 2",
+        "field": "string — data point name",
+        "ai_finding": "string — original AI value",
+        "ai_confidence": "B | C",
+        "cds_finding": "string — CDS verified value",
+        "cds_source": "string — CDS source (e.g., 'staff call 4/15', 'permit records')",
+        "cds_confidence": "A | B",
+        "status": "confirmed | corrected | unverified"
+      }
+    ],
+    "new_findings": [
+      {
+        "field": "string",
+        "finding": "string",
+        "source": "string",
+        "section": "string — which report section CDS added it to"
+      }
+    ],
+    "vendor_notes": "string — any free-text notes CDS added outside the table structure"
   }
 }
 ```
 
-**RHODES Write:** Yes — vendor SIR data is the ground-truth record.
+**RHODES Write:** Yes — vendor-verified SIR data is the ground-truth record.
 
 **SKILL.md outline (to build):**
 ```
-# Vendor SIR Extraction
+# CDS Verification Extraction
 
 ## Purpose
-Extract structured data from a CDS vendor SIR PDF into the standard
-SIR schema, enabling direct comparison with the AI SIR extraction.
+Read a completed CDS Verification Report and extract structured data.
+The input is the same AI SIR that was sent out, now with CDS's
+verification columns filled in.
 
 ## Input
-- PDF file (from email attachment or Drive upload)
-- Extraction schema (same fields as sir_ai — shared schema definition)
+- CDS-returned verification report (markdown or docx)
+- Extraction schema (same base fields as sir_ai + verification metadata)
 
 ## Process
-1. Read the PDF
-2. Identify sections: zoning, authority chain, code framework, permit path,
-   feasibility, environmental, infrastructure
-3. For each schema field, extract the vendor's finding
-4. Map vendor terminology to standard field values where possible
-5. Capture vendor-specific notes that don't map to schema fields
+1. Read the returned document
+2. Parse tables looking for the 3 CDS columns:
+   "CDS Verified Finding" | "CDS Source" | "CDS Confidence"
+3. For each B/C row:
+   a. Extract the claim-id from the HTML comment
+   b. Read the original AI finding from the existing columns
+   c. Read the CDS finding from the CDS columns
+   d. Classify: confirmed (same value), corrected (different value),
+      or unverified (CDS columns blank)
+4. Scan for new findings CDS added outside the original tables
+5. Extract all schema fields using best available value:
+   - CDS-verified value if present, else AI value
+6. Build the verification_summary counts
+
+## Key Advantage
+Because the returned document IS the original SIR with CDS columns added,
+the extraction agent doesn't need to map between two different document
+structures. Every field has a known location. The claim-id comments provide
+exact row matching.
 
 ## Output
-- Structured JSON matching the sir_ai schema
-- vendor_notes field for unstructured vendor observations
+- Structured JSON matching the sir_vendor schema
+- verification_summary with counts
+- verified_items array with per-item detail
 
 ## Hard Rules
-1. Use the SAME schema as sir_ai — field names must match exactly
-2. Do not infer or fill fields the vendor did not address — leave null
-3. Preserve vendor's exact language in vendor_notes
-4. Map vendor terminology to standard values:
-   - "By right" / "Permitted" / "As of right" → "Permitted by right"
-   - "CUP" / "Conditional" / "Special Use" → "Conditional Use Permit"
-   - etc. (full mapping table in references/)
+1. Use the SAME base schema as sir_ai — field names must match exactly
+2. When CDS verified a field, use CDS value as the canonical value
+3. When CDS left a field blank, carry forward the AI value but do NOT
+   upgrade its confidence
+4. Do not infer or fill fields neither the AI nor CDS addressed — leave null
+5. Preserve CDS's exact language in cds_finding and cds_source
+6. If CDS added findings outside the table structure, capture them in
+   new_findings array
+7. Map CDS terminology to standard values using the same mapping table
+   as sir_ai normalization
 ```
 
 **Supporting Files (to build):**
@@ -666,73 +801,91 @@ SIR schema, enabling direct comparison with the AI SIR extraction.
 
 ### AGENT-07: Vendor Building Inspection Extraction
 
-**Purpose:** Read a Worksmith Building Inspection PDF and extract structured data into the standard inspection schema.
+**Purpose:** Read a completed Worksmith Inspection Report (the full SIR + inspection overlay document returned from the field) and extract structured data into the standard inspection schema. The return document uses the same claim-id system as the CDS verification report, enabling field-by-field matching between AI findings and inspector findings.
 
 **Invoking Event:** Email received classified as "Worksmith Building Inspection Return"
 
-**Subs to Monitor:** Email inbox — classify as Worksmith return
+**Subs to Monitor:** Email inbox — classify as Worksmith return (look for Worksmith sender, inspection report attachment, or reply to the outbound Worksmith email from WU-04)
 
 **Connectors:** Gmail, Google Drive
 
 **Skill:** `vendor-bi-extraction/SKILL.md` (NEW — needs to be built)
 
-**Sindri Data In:** `site_meta` (for site matching)
+**Sindri Data In:** `site_meta` (for site matching), `sir_ai` (for claim-id cross-reference)
 
 **Sindri Data Out:**
 ```json
 {
   "inspection_vendor": {
     "extracted_at": "ISO timestamp",
-    "source_doc_url": "string — Drive URL of the vendor PDF",
+    "source_doc_url": "string — Drive URL of the completed inspection report",
     "address": "string",
-    "structural": {
-      "construction_type": "string",
-      "stories": "integer",
-      "basement": "boolean",
-      "roof_type": "string",
-      "foundation": "string",
-      "condition": "string"
+    "inspector_name": "string",
+    "inspection_date": "string — ISO date",
+    "overall_recommendation": "PROCEED | PROCEED WITH CAUTION | REQUIRES JUSTIFICATION | PASS",
+    "deal_killer_flags": {
+      "safe_dropoff": "yes | no | needs_evaluation",
+      "adequate_exits": "yes | no | needs_evaluation",
+      "exit_doors_compliant": "yes | no | needs_evaluation",
+      "structurally_sound": "yes | no | needs_evaluation",
+      "no_hazmat_visible": "yes | no | needs_evaluation",
+      "any_no": "boolean — true if any answer is No"
     },
-    "mep": {
-      "hvac_type": "string",
-      "hvac_condition": "string",
-      "electrical_panel": "string",
-      "plumbing_condition": "string",
-      "fire_alarm": "boolean",
-      "sprinkler_system": "boolean",
-      "sprinkler_coverage": "string"
+    "sections": {
+      "exterior_site": {
+        "items": [
+          {
+            "item": "string — checklist item name",
+            "ai_prefill": "string | null — what the SIR pre-filled",
+            "confirmed": "boolean — inspector checked the Confirmed box",
+            "finding": "string | null — inspector's actual finding (if different from AI or new)",
+            "source_citation": "string | null — how they verified (observation, measurement, photo, etc.)",
+            "notes": "string | null",
+            "claim_id": "string | null — from HTML comment, for delta matching"
+          }
+        ]
+      },
+      "parking_dropoff": { "items": "[same structure]" },
+      "entry_egress": { "items": "[same structure]" },
+      "fire_alarm": { "items": "[same structure]" },
+      "sprinkler": { "items": "[same structure]" },
+      "emergency_systems": { "items": "[same structure]" },
+      "restrooms_plumbing": { "items": "[same structure]" },
+      "ada": { "items": "[same structure]" },
+      "structural": { "items": "[same structure]" },
+      "hvac_mechanical": { "items": "[same structure]" },
+      "electrical": { "items": "[same structure]" }
     },
-    "ada": {
-      "accessible_entrance": "boolean",
-      "accessible_restroom": "boolean",
-      "elevator": "boolean | null",
-      "ramp": "boolean",
-      "notes": "string"
+    "occupant_load": {
+      "net_floor_area_sf": "integer | null",
+      "total_occupant_load": "integer | null",
+      "net_learning_area_sf": "integer | null",
+      "student_capacity": "integer | null"
     },
-    "hazmat": {
-      "asbestos_risk": "none | low | medium | high | unknown",
-      "lead_paint_risk": "none | low | medium | high | unknown",
-      "mold_observed": "boolean",
-      "notes": "string"
+    "cost_estimates": [
+      {
+        "item": "string — category (Fire Alarm, Egress, ADA, Plumbing, HVAC, Electrical, Structural, Other)",
+        "description": "string",
+        "priority": "CRITICAL | IMPORTANT | MINOR",
+        "low_estimate": "number | null",
+        "high_estimate": "number | null",
+        "notes": "string | null"
+      }
+    ],
+    "deficiency_summary": {
+      "critical_count": "integer",
+      "important_count": "integer",
+      "minor_count": "integer",
+      "total_remediation_low": "number — sum of all low estimates",
+      "total_remediation_high": "number — sum of all high estimates"
     },
-    "egress": {
-      "exit_count": "integer",
-      "exit_separation_adequate": "boolean | null",
-      "corridor_width_adequate": "boolean | null",
-      "dead_end_corridors": "boolean | null",
-      "notes": "string"
-    },
-    "restrooms": {
-      "count": "integer",
-      "ada_compliant_count": "integer",
-      "condition": "string"
-    },
-    "kitchen": {
-      "exists": "boolean",
-      "type": "full | kitchenette | none",
-      "condition": "string"
-    },
-    "vendor_notes": "string"
+    "specialist_referrals": [
+      {
+        "type": "structural engineer | MEP engineer | fire protection engineer | environmental | other",
+        "reason": "string"
+      }
+    ],
+    "vendor_notes": "string — any inspector observations not captured in structured fields"
   }
 }
 ```
@@ -744,35 +897,61 @@ SIR schema, enabling direct comparison with the AI SIR extraction.
 # Vendor Building Inspection Extraction
 
 ## Purpose
-Extract structured data from a Worksmith Building Inspection PDF into
-the standard inspection schema.
+Extract structured data from a completed Worksmith Inspection Report
+(full SIR + inspection overlay returned from the field) into the
+standard inspection schema.
 
 ## Input
-- PDF file (from email attachment or Drive upload)
-- Extraction schema (shared inspection schema definition)
+- Completed inspection report (from email attachment or Drive upload)
+  Format: markdown with 11-section inspection checklist tables,
+  cost estimate table, occupant load verification, overall assessment.
+  Each table row has: Item | AI Pre-Fill | Confirmed | Finding | Source/Citation | Notes
+  Claim-id HTML comments embedded after pre-filled rows.
+- site_meta (for address matching)
+- sir_ai (for claim-id cross-reference)
 
 ## Process
-1. Read the PDF
-2. Identify sections: structural, MEP, ADA, hazmat, egress, restrooms, kitchen
-3. For each schema field, extract the inspector's finding
-4. Classify condition assessments using standard scale
-5. Capture inspector notes that don't map to schema fields
+1. Read the completed inspection report
+2. Extract header info: inspector name, date, overall recommendation
+3. Extract deal-killer flags (5 binary questions)
+4. For each of the 11 inspection sections:
+   a. Parse the table rows
+   b. For each row: extract item name, AI pre-fill, confirmed flag,
+      inspector finding, source/citation, notes
+   c. Extract claim-id from HTML comments
+   d. Classify: confirmed (AI + inspector agree), corrected (differ),
+      new_finding (inspector found something AI missed),
+      unverified (inspector left blank)
+5. Extract occupant load calculations
+6. Extract cost estimate table → structured array with totals
+7. Extract specialist referrals if any
+8. Compute deficiency summary: count by priority, sum cost ranges
 
 ## Output
-- Structured JSON matching the inspection schema
-- vendor_notes field for unstructured observations
+- Structured JSON matching the inspection_vendor schema
+- claim_ids preserved for WU-09 delta computation
+- deficiency_summary with rollup counts and cost totals
 
 ## Hard Rules
 1. Never infer construction type — only extract if explicitly stated
 2. Never upgrade condition assessments — use the inspector's language
 3. Leave fields null if the inspector did not address them
-4. Flag any safety concerns (hazmat, egress deficiency) prominently
+4. Flag any deal-killer "No" answers prominently in the output
+5. Preserve claim-ids exactly as found — do not regenerate
+6. Cost estimates extracted as-is — do not adjust or average
+7. If the inspector recommends specialist follow-up, capture it
+   in specialist_referrals — the DD report needs this
+8. Overall recommendation must be one of the 4 standard values.
+   If inspector used non-standard language, map it:
+   "Approved" → PROCEED, "Conditionally approved" → PROCEED WITH CAUTION,
+   "Major concerns" → REQUIRES JUSTIFICATION, "Failed" / "Not recommended" → PASS
 ```
 
 **Supporting Files (to build):**
-- `SKILL.md` — extraction instructions and schema
-- `references/shared-inspection-schema.json` — the standard inspection schema
+- `SKILL.md` — full extraction instructions, schema reference, and examples
+- `references/shared-inspection-schema.json` — the standard inspection schema (11 sections + cost estimates + occupant load)
 - `references/condition-scale.md` — standard condition assessment scale
+- `references/checklist-section-map.md` — maps the 11 template sections to schema field paths (handles format variations between sites)
 
 ---
 
@@ -1082,7 +1261,7 @@ The dual-column design depends on AI and vendor extractions using identical sche
 | Schema | Used By | Fields |
 |---|---|---|
 | `shared-sir-schema.json` | WU-02 (sir_ai), WU-06 (sir_vendor), WU-09 (sir_delta) | zoning, authority chain, code framework, permit path, feasibility, environmental, infrastructure |
-| `shared-inspection-schema.json` | WU-07 (inspection_vendor), WU-09 (inspection_delta) | structural, MEP, ADA, hazmat, egress, restrooms, kitchen |
+| `shared-inspection-schema.json` | WU-07 (inspection_vendor), WU-09 (inspection_delta) | 11 sections (exterior/site, parking/drop-off, entry/egress, fire alarm, sprinkler, emergency systems, restrooms/plumbing, ADA, structural, HVAC/mechanical, electrical) + deal-killer flags, occupant load, cost estimates, deficiency summary, specialist referrals, overall recommendation |
 | `isp-extraction-schema.json` | WU-08 (isp_extract) | building code info, executive summary, capacity analysis, classroom assignments, tier evaluation, ADA pre-check, IBC compliance (occupant load + plumbing), adjacency compliance, requirement status, optimization proposals, room schedule, door schedule |
 
 The AI SIR (WU-02) doesn't directly use `shared-sir-schema.json` today — its output is defined by the ease-of-conversion skill. A mapping layer in WU-02 or a schema update to the skill will be needed to ensure the output conforms to the shared schema for delta computation.
