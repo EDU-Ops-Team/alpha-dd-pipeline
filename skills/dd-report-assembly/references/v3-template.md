@@ -19,9 +19,9 @@ The V3 DD report is a structured one-pager (not prose). The Google Doc builder c
 
 # Executive Summary
 
-| Can we open this school in time for the current school year? |
+| Can this school be open in time for the current school year (8/12 or 9/8)? |
 | :---- |
-| **{{exec.c_answer}}** Education Regulatory Approval: {{exec.c_edreg}} Occupancy path: {{exec.c_occupancy}} Zoning: {{exec.c_zoning}} |
+| **{{exec.c_answer}}** · Education Regulatory Approval: {{exec.c_edreg}} · Occupancy path: {{exec.c_occupancy}} · Zoning: {{exec.c_zoning}} · Permit Timeline: {{exec.c_permit_timeline}} · Construction Timeline: {{exec.c_construction_timeline}} |
 
 | Build Scenarios: Capacity, Capex, Open Date |
 | :---- |

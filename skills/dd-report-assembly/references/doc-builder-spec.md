@@ -60,12 +60,18 @@ The Google Docs API requires table cell indices to be read back from the live do
 2. Insert horizontal divider (1pt solid light blue bottom border)
 3. Insert "Executive Summary" heading (H1)
 4. Insert "Can We Open?" card:
-   - Question: "Can we open this school in time for the current school year?" (11pt bold)
-   - Answer: `exec.c_answer` value (12pt bold)
-   - Checklist (10pt):
+   - Question: `"Can this school be open in time for the current school year (8/12 or 9/8)?"` (11pt bold)
+     - Heading constant: `HEADING_CAN_WE_OPEN = "Can this school be open in time for the current school year (8/12 or 9/8)?"`
+     - Legacy-compatible fallback headings to accept when parsing an existing doc:
+       - `LEGACY_V3 = "Can this school be open in time for the current school year?"`
+       - `LEGACY = "Can we do this?"`
+   - Answer line: render the full `exec.c_answer` value (12pt bold). The value already carries its `Yes, because: …` / `No, because: …` phrasing from Step 3 — do not re-wrap or add a separate reason line.
+   - Checklist (10pt, one line per row, `Label: value`):
      - Education Regulatory Approval: `exec.c_edreg`
      - Occupancy path: `exec.c_occupancy`
      - Zoning: `exec.c_zoning`
+     - Permit Timeline: `exec.c_permit_timeline`
+     - Construction Timeline: `exec.c_construction_timeline`
 5. Insert "Buildout Analysis" heading (H2)
 6. Insert Build Scenarios table (4 rows x 4 cols)
 7. Flush
@@ -117,11 +123,54 @@ The Google Docs API requires table cell indices to be read back from the live do
 
 1. Re-read, find end index
 2. Insert "Notes and Source Documents" heading (H1)
-3. Insert "Acquisition Conditions" subheading (11pt bold) + `exec.acquisition_conditions` value
-4. Insert "Risks to Note" subheading (11pt bold) + `exec.risk_notes` value
+3. Insert "Acquisition Conditions" subheading (11pt bold) + `exec.acquisition_conditions` rendered as a body-and-footnotes card (see *Notes-Card Rendering* below)
+4. Insert "Risks to Note" subheading (11pt bold) + `exec.risk_notes` rendered as a body-and-footnotes card (see *Notes-Card Rendering* below)
 5. Insert "Source Documents" heading (H2)
 6. Insert source documents table (7 rows x 2 cols)
 7. Flush
+
+#### Notes-Card Rendering (Acquisition Conditions and Risks to Note)
+
+Each notes card is rendered as two stacked paragraph groups:
+
+1. **Body bullets** — one bullet per item, each ending in one or more Unicode superscript digits (`¹²³…`). 10pt Arial.
+2. Single blank line separator.
+3. **`Notes:` label** — plain bold 10pt Arial, left-aligned, no bullet.
+4. **Footnote lines** — one line per footnote, 9pt Arial, not bold, not bulleted. Each line begins with the matching superscript digit followed by a space, then the `(source: …; evidence: …)` payload.
+   - Consolidated footnotes (e.g. TI breakdown) render their sub-items as indented lines (4-space indent) inside the same footnote.
+
+Input shape for each notes token (parsed by the builder):
+
+```json
+{
+  "bullets": [
+    "Request TI allowance of approximately $285,000 for buildout scope.¹",
+    "Landlord must replace roof membrane before signing — active leaks in south bay.²"
+  ],
+  "footnotes": [
+    {"number": 1, "kind": "itemized", "lines": [
+        "TI allowance breakdown:",
+        "    - $95,000 — sprinkler retrofit (source: inspection_vendor.mep.sprinkler_status; evidence: \"no sprinkler system present\")",
+        "    - $60,000 — restroom ADA rebuild (source: inspection_vendor.plumbing.restrooms; evidence: \"2 non-compliant single-occupant restrooms\")",
+        "    Total: $285,000"
+    ]},
+    {"number": 2, "kind": "simple", "text": "(source: inspection_vendor.envelope.roof; evidence: \"active water infiltration, south bay, observed 03/12/26\")"}
+  ]
+}
+```
+
+The replacements dict may also pass the already-rendered string (with superscripts, blank line, `Notes:` label, and footnote lines in order) as a single token value; the builder detects strings that already contain a `Notes:` line and passes them through unchanged. When parsing from the structured shape, the builder assembles the final string in this exact layout:
+
+```
+- <bullet 1 text>¹
+- <bullet 2 text>²
+
+Notes:
+¹ <footnote 1 payload>
+² <footnote 2 payload>
+```
+
+Validator: the number of distinct superscripts referenced in `bullets` must equal the number of `footnotes` entries, and every footnote number must appear at least once in the body.
 
 ### Phase 7: Populate Source Documents Table
 

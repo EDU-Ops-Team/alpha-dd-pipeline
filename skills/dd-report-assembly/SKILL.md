@@ -85,13 +85,20 @@ Map from `site_meta` (WU-01):
 | `meta.prepared_by` | `site_meta.p1_name` | `[Not found - P1 not set]` |
 | `meta.drive_folder_url` | `site_meta.drive_folder_url` | `[Not found - Drive folder]` |
 
-### Step 3: Populate "Can We Open?" Card (4 tokens)
+### Step 3: Populate "Can We Open?" Card (6 tokens)
 
-The card answers the question: **"Can we open this school in time for the current school year?"**
+The card answers the question: **"Can this school be open in time for the current school year (8/12 or 9/8)?"**
 
-The current school year opening deadline is **August 12, 2026**. This date is the hard cutoff for the `exec.c_answer` timeline test.
+The current school year has two acceptable open dates: **08/12/26** (preferred) and **09/08/26** (latest acceptable). The deadline used for the `exec.c_answer` timeline test is **09/08/26** — any scenario that can open on or before that date passes the timeline gate.
 
-These four pick-menu dimensions determine the executive answer. Each must resolve to exactly one allowed value.
+These six pick-menu / scalar dimensions determine the executive answer. Each must resolve to exactly one allowed value.
+
+Constants (used by the logic below):
+
+```
+SCHOOL_YEAR_START_DATES = ("08/12/26", "09/08/26")
+SCHOOL_YEAR_DEADLINE    = "09/08/26"   # = max(SCHOOL_YEAR_START_DATES)
+```
 
 #### exec.c_zoning
 
@@ -129,23 +136,45 @@ Source: `school_approval` (WU-03)
 | `school_approval.gating_before_open` = true AND no prior state presence | `Required have not done` |
 | null | `[Not found - school approval not assessed]` |
 
+#### exec.c_permit_timeline
+
+Source: `opening_plan.scenarios.best` (permit-related gating factors)
+
+This token is a short, agent-composed summary of the permitting path on the fastest scenario — for example: `"Use Permit filed 05/01/26, public hearing 06/10/26, issued 06/20/26"` or `"No discretionary permit required — building permit ~30 days"`.
+
+Source: Agent. Fallback: `[Not found - permit timeline not computed in opening_plan]`.
+
+#### exec.c_construction_timeline
+
+Source: `opening_plan.scenarios.best` (construction duration / phase)
+
+A short agent summary of the construction window, e.g. `"Light renovation — 10 weeks starting 06/22/26; substantial completion 08/30/26"` or `"Furniture + tech install only — 2 weeks"`.
+
+Source: Agent. Fallback: `[Not found - construction timeline not computed in opening_plan]`.
+
 #### exec.c_answer
 
-Synthesize from the three dimensions above plus a timeline feasibility test.
+**Deterministic** — no longer synthesized from the other dimensions. It is a pure date comparison against the school-year deadline.
 
-**Timeline test:** Calculate the best-case open date from `opening_plan.scenarios.best.target_date`. If the best-case date falls after **August 12, 2026**, the answer is `No` regardless of the other dimensions.
+```
+fastest_open_date = parse_open_date(opening_plan.scenarios.best.target_date)
 
-Evaluation order (first match wins):
+if fastest_open_date is None:
+    c_answer = "No, because: opening plan did not produce a fastest-open date."
+elif fastest_open_date <= SCHOOL_YEAR_DEADLINE:   # 09/08/26
+    c_answer = f"Yes, because: fastest-open date {fastest_open_date_str} is on or before {SCHOOL_YEAR_DEADLINE}."
+else:
+    c_answer = f"No, because: fastest-open date {fastest_open_date_str} is after {SCHOOL_YEAR_DEADLINE}."
+```
 
-| # | Condition | Value | Reason |
-|---|---|---|---|
-| 1 | c_zoning = "Prohibited" | `No` | Zoning blocks the use entirely |
-| 2 | c_occupancy = "needs work" AND best-case open date > Aug 12, 2026 | `No` | Occupancy conversion can't finish in time |
-| 3 | Best-case open date > August 12, 2026 (from opening_plan) | `No` | Even the fastest path misses the school year |
-| 4 | Any dimension = "Not found" | `Yes see notes` | Incomplete data — can't confirm |
-| 5 | c_edreg = "Required have not done" | `Yes see notes` | Regulatory approval outstanding |
-| 6 | c_zoning = "Public approval" | `Yes see notes` | Public hearing outcome uncertain |
-| 7 | All dimensions green AND best-case open date ≤ Aug 12, 2026 | `Yes` | Clear path to open on time |
+Allowed values: exactly one of
+
+- `Yes, because: <reason>`
+- `No, because: <reason>`
+
+`parse_open_date` accepts `MM/DD/YY`, `MM/YY` (treated as end-of-month), and ISO dates, and returns a comparable date object. On unparseable input it returns `None` and the token falls through to the `No` branch.
+
+The other checklist dimensions (`c_zoning`, `c_occupancy`, `c_edreg`, `c_permit_timeline`, `c_construction_timeline`) are rendered in the card for context, but they do **not** override the date-based answer.
 
 ### Step 4: Populate Build Scenarios (up to 16 tokens)
 
@@ -157,7 +186,7 @@ Three scenarios today: Fastest Open, Max Capacity, and Recommended Path. Max Val
 |---|---|---|
 | `exec.fastest_open_capacity` | `isp_extract.capacity_tiers.micro.max_students` | Integer |
 | `exec.fastest_open_capex` | `cost_estimates.scenarios[name="Light renovation"].total` | Dollar: `$XXX,XXX` |
-| `exec.fastest_open_open_date` | `opening_plan.scenarios.best.target_date` | `MM/YY` |
+| `exec.fastest_open_open_date` | `opening_plan.scenarios.best.target_date` | `MM/DD/YY` |
 
 The open date comes from the Opening Plan (WU-12), which already factors in permit timelines and construction duration from its own scenario analysis. Do not calculate construction timelines independently — the Opening Plan is the single source of truth for dates.
 
@@ -169,7 +198,7 @@ If `opening_plan.scenarios.best` does not include a construction duration breakd
 |---|---|---|
 | `exec.max_capacity_capacity` | `isp_extract.capacity_tiers.250.max_students` (or `.1000` if school_type = "1000") | Integer |
 | `exec.max_capacity_capex` | `cost_estimates.scenarios[name="Full buildout"].total` | Dollar: `$XXX,XXX` |
-| `exec.max_capacity_open_date` | `opening_plan.scenarios.worst.target_date` | `MM/YY` |
+| `exec.max_capacity_open_date` | `opening_plan.scenarios.worst.target_date` | `MM/DD/YY` |
 
 Same rule: dates come from the Opening Plan. Do not fabricate construction duration estimates.
 
@@ -178,7 +207,7 @@ Same rule: dates come from the Opening Plan. Do not fabricate construction durat
 Recommended Path is inferred by comparing Fastest Open and Max Capacity. The logic:
 
 ```
-1. Can both Fastest Open and Max Capacity complete before August 12, 2026?
+1. Can both Fastest Open and Max Capacity complete on or before 09/08/26 (the school-year deadline)?
    a. YES → Both are on time. Compute capacity_per_dollar for each:
       - capacity_per_dollar = capacity / capex
       - The scenario with the higher capacity_per_dollar wins → that becomes Recommended Path
@@ -198,7 +227,7 @@ Recommended Path is inferred by comparing Fastest Open and Max Capacity. The log
 |---|---|---|
 | `exec.recommended_path_capacity` | Copied from the winning scenario | Integer |
 | `exec.recommended_path_capex` | Copied from the winning scenario | Dollar: `$XXX,XXX` |
-| `exec.recommended_path_open_date` | Copied from the winning scenario | `MM/YY` |
+| `exec.recommended_path_open_date` | Copied from the winning scenario | `MM/DD/YY` |
 
 Include a note in the trace report explaining which scenario was selected and why (capacity_per_dollar ratio or timeline constraint).
 
@@ -271,6 +300,8 @@ For Max Value: set all cells to empty string `""`.
 
 ### Step 6: Populate Notes Tokens (2 tokens)
 
+> **Citation format — footnotes, not inline.** All bullets in `exec.acquisition_conditions` and `exec.risk_notes` use numbered footnote superscripts (¹²³…) that reference a `Notes:` block rendered at the end of the card. See the *Footnote Citations — Never Inline* section below for the exact rendering rules.
+
 #### exec.acquisition_conditions
 
 Synthesize from all available sources. Two categories:
@@ -281,7 +312,37 @@ Sources to check:
 1. `inspection_best` — sprinkler gaps, restroom demolition, HVAC replacement, electrical panel, ADA deficiencies
 2. `cost_estimates` — high-cost line items above $40K
 
-Format: `"- Request TI allowance of approximately $[X] for [scope] ([source]: [evidence])"`
+**Format: one consolidated bullet with an itemized footnote.** Do not emit one bullet per component — sum the components into a single TI ask and put the breakdown in the footnote.
+
+Body bullet (rendered in the card):
+
+```
+- Request TI allowance of approximately $[TOTAL] for buildout scope.¹
+```
+
+Footnote (rendered in the `Notes:` block):
+
+```
+¹ TI allowance breakdown:
+    - $[A] — [component A scope] (source: [src]; evidence: [excerpt])
+    - $[B] — [component B scope] (source: [src]; evidence: [excerpt])
+    - $[C] — [component C scope] (source: [src]; evidence: [excerpt])
+    Total: $[TOTAL]
+```
+
+Worked example (for guidance — do not copy verbatim):
+
+```
+- Request TI allowance of approximately $285,000 for buildout scope.¹
+
+Notes:
+¹ TI allowance breakdown:
+    - $95,000 — sprinkler retrofit to meet Group E (source: inspection_vendor.mep.sprinkler_status; evidence: "no sprinkler system present")
+    - $60,000 — restroom demolition and ADA rebuild (source: inspection_vendor.plumbing.restrooms; evidence: "2 non-compliant single-occupant restrooms")
+    - $80,000 — HVAC replacement (source: cost_estimates.scenarios[0].line_items.mep_fire_life_safety; evidence: "$80,000")
+    - $50,000 — electrical panel upgrade (source: inspection_vendor.electrical.panel; evidence: "200A panel at capacity")
+    Total: $285,000
+```
 
 **Type B — Landlord Must Address** (landlord's existing obligation):
 
@@ -290,7 +351,9 @@ Sources to check:
 2. `sir_best` — zoning pre-conditions
 3. `permit_history` — open violations, deferred maintenance flags
 
-Format: `"- Landlord must [action] before signing — [evidence] (Source: [source])"`
+Body bullet format: `"- Landlord must [action] before signing — [short evidence summary].²"`
+
+Footnote format: `"² (source: [source]; evidence: [full excerpt])"`
 
 #### exec.risk_notes
 
@@ -305,7 +368,57 @@ Sources to check (in order):
 
 Classification test: "Did we find evidence in the structured data, AND does it directly threaten timeline or viability?"
 
-Format: `"- [Risk description] ([source]: [evidence])"`
+Body bullet format: `"- [Risk description].ⁿ"` (superscript refers to a footnote in the same card's `Notes:` block)
+
+Footnote format: `"ⁿ (source: [source]; evidence: [excerpt])"`
+
+---
+
+### Footnote Citations — Never Inline
+
+Every source citation on `exec.acquisition_conditions` and `exec.risk_notes` bullets must appear in a footnote, **not** inline. Inline `(source: evidence)` clutter in the body is prohibited.
+
+**Superscript digits** (plain Unicode — render in any font without special formatting):
+
+| Number | Superscript |
+|---|---|
+| 1 | ¹ |
+| 2 | ² |
+| 3 | ³ |
+| 4 | ⁴ |
+| 5 | ⁵ |
+| 6 | ⁶ |
+| 7 | ⁷ |
+| 8 | ⁸ |
+| 9 | ⁹ |
+| 10 | ¹⁰ |
+| 11 | ¹¹ |
+| 12 | ¹² |
+
+For higher numbers, concatenate (`¹³`, `¹⁴`, …).
+
+**Rendering layout inside each notes card** (`acquisition_conditions` and `risk_notes` are each self-contained — footnote numbering restarts at 1 in each card):
+
+```
+- Body bullet 1.¹
+- Body bullet 2.²
+- Body bullet 3.³
+
+Notes:
+¹ (source: …; evidence: …)
+² (source: …; evidence: …)
+³ (source: …; evidence: …)
+```
+
+**Numbering rules:**
+
+1. Number footnotes sequentially in the order the bullets appear in the card (1, 2, 3, …).
+2. One footnote per source citation. If a single bullet has multiple citations, allocate multiple superscripts on that bullet (e.g. `…retrofit.¹ ²`) rather than packing multiple sources into one footnote.
+3. Consolidated bullets (like Type A TI asks) use a **single** footnote whose body is an itemized sub-list, one sub-bullet per component with its own source+evidence. Do not emit one footnote per component for consolidated bullets.
+4. The `Notes:` label is plain text, bold, same font as the body (10pt Arial bold). One blank line separates the last body bullet from the `Notes:` label.
+5. Footnote text is 9pt Arial, not bold. Each footnote is a single line unless it is a consolidated breakdown, in which case sub-bullets indent 4 spaces.
+
+The doc builder renders the body bullets and the `Notes:` block as two separate paragraph groups inside the same Acquisition Conditions / Risks to Note section — see `references/doc-builder-spec.md` Phase 6.
 
 ### Step 7: Populate Source Document Links (6 tokens)
 
@@ -339,10 +452,11 @@ This evidence dict is included in the trace report for reviewability.
 
 1. Collect all tokens into a flat `report_data` dict using canonical token names
 2. Validate:
-   - `exec.c_answer` must be exactly `Yes`, `Yes see notes`, or `No`
+   - `exec.c_answer` must start with exactly `Yes, because:` or `No, because:` (see Step 3 — deterministic)
    - All dollar amounts must have commas
-   - All dates must be `MM/YY` format
+   - All dates must be `MM/DD/YY` format
    - No raw `{{token}}` patterns in any value
+   - Every footnote superscript in `exec.acquisition_conditions` and `exec.risk_notes` bodies has a matching entry in the card's `Notes:` block, and vice versa
 3. Track unfilled tokens — use sourced gap labels, never bare `[Pending]`
 
 ### Step 10: Build the Google Doc
@@ -408,11 +522,11 @@ After the doc is built:
 1. **Never read raw PDFs.** All data comes from structured Sindri work unit outputs. If a work unit hasn't run, the data is null — use a gap label.
 2. **Vendor > AI for every field where both exist.** No exceptions.
 3. **Never re-run upstream skills.** Do not invoke ease-of-conversion, school-approval, or sir-to-permitting-plan. Read their structured output only.
-4. **exec.c_answer must be exactly one of: `Yes`, `Yes see notes`, `No`.** Any other value is invalid. Drop it rather than pass through.
+4. **exec.c_answer must start with exactly `Yes, because:` or `No, because:`.** It is a deterministic date comparison against `09/08/26`, not a synthesis. Any other format is invalid — drop it rather than pass through.
 5. **All dollar amounts with commas.** `$185,000` not `$185000`.
-6. **All dates in MM/YY format.** `01/27` not `January 2027`.
+6. **All dates in MM/DD/YY format.** `06/22/26` not `June 2026` and not `06/26`.
 7. **Sourced gap labels only.** Never use bare `[Pending]` or `[TBD]`. Always: `[Not found - {what was checked}]`.
-8. **Every acquisition condition and risk note must cite its source.** Format: `(source: evidence)`. No unsourced bullets.
+8. **Every acquisition condition and risk note must cite its source as a footnote, never inline.** Body bullets carry a superscript (`¹²³…`); the `Notes:` block at the end of the card holds the `(source: …; evidence: …)` text. Consolidated bullets (e.g. TI total) use a single footnote with an itemized breakdown. See SKILL.md *Footnote Citations — Never Inline* section.
 9. **Flag delta conflicts.** When `sir_delta` or `inspection_delta` shows a high-severity conflict, include it in `exec.risk_notes` as: `"AI and vendor disagree on [field]: AI says [X], vendor says [Y]"`.
 10. **Track provenance for every token.** The trace report must show which work unit and which field populated each token.
 11. **Recommended Path is inferred, Max Value gets a gap label.** Recommended Path uses the capacity-per-dollar logic from Step 4. Max Value is gap-labeled until that data source exists in the pipeline.
@@ -426,7 +540,7 @@ After the doc is built:
 
 The report is complete when:
 - All 7 meta tokens are populated (or gap-labeled)
-- All 4 "Can We Open?" dimensions have valid values (or gap labels)
+- All 6 "Can We Open?" tokens (`c_answer`, `c_zoning`, `c_occupancy`, `c_edreg`, `c_permit_timeline`, `c_construction_timeline`) have valid values (or gap labels)
 - Fastest Open and Max Capacity scenarios have capacity, capex, and open date (or gap labels)
 - Cost breakdown has all 12 line items for active scenarios (or gap labels)
 - Acquisition conditions and risk notes are populated from available data

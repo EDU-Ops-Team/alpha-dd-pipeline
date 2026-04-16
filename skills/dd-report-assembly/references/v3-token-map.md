@@ -1,6 +1,6 @@
 # V3 Token Map — Complete Token-to-Sindri-Source Mapping
 
-Total tokens: 71 (7 meta + 4 exec card + 12 scenario summary + 48 cost breakdown + 2 notes + 6 sources — some overlap in counting)
+Total tokens: 73 (7 meta + 6 exec card + 12 scenario summary + 48 cost breakdown + 2 notes + 6 sources — some overlap in counting)
 
 ---
 
@@ -18,14 +18,24 @@ Total tokens: 71 (7 meta + 4 exec card + 12 scenario summary + 48 cost breakdown
 
 ---
 
-## "Can We Open?" Card (4)
+## "Can We Open?" Card (6)
+
+Card question text: **"Can this school be open in time for the current school year (8/12 or 9/8)?"**
+
+School-year constants:
+- `SCHOOL_YEAR_START_DATES = ("08/12/26", "09/08/26")`
+- `SCHOOL_YEAR_DEADLINE    = "09/08/26"` — the hard cutoff used by `exec.c_answer`
 
 | Token | Sindri Source | Allowed Values |
 |---|---|---|
-| `exec.c_answer` | Synthesized from c_zoning + c_occupancy + c_edreg | `Yes` / `Yes see notes` / `No` |
+| `exec.c_answer` | **Deterministic** date comparison: `opening_plan.scenarios.best.target_date` vs `09/08/26` (see SKILL.md Step 3) | `Yes, because: <reason>` / `No, because: <reason>` |
 | `exec.c_zoning` | `sir_best.zoning_status` (vendor > AI) | `Permitted by right` / `Use Permit Required (Admin approval)` / `Use Permit Required (Public approval)` / `Prohibited` |
 | `exec.c_occupancy` | `sir_best.feasibility.occupancy_compatibility` + `sir_best.e_occupancy_score` | `Has E-Occupancy` / `Change of use required, meets E-Occupancy` / `Change of use required, needs work` |
 | `exec.c_edreg` | `school_approval.archetype` + `school_approval.gating_before_open` | `Not required` / `Required and have done` / `Required have not done` |
+| `exec.c_permit_timeline` | Agent — summarized from `opening_plan.scenarios.best` permit gating factors | Free text (one-line summary) |
+| `exec.c_construction_timeline` | Agent — summarized from `opening_plan.scenarios.best` construction duration/phase | Free text (one-line summary) |
+
+The card also renders `exec.c_permit_timeline` and `exec.c_construction_timeline` as checklist rows, but neither overrides `exec.c_answer` — the answer is a pure date comparison.
 
 ---
 
@@ -50,7 +60,9 @@ Total tokens: 71 (7 meta + 4 exec card + 12 scenario summary + 48 cost breakdown
 | `exec.recommended_path_capex` | Copied from the winning scenario |
 | `exec.recommended_path_open_date` | Copied from the winning scenario |
 
-Inference rule: If both Fastest Open and Max Capacity can complete before Aug 12, 2026, the scenario with higher `capacity / capex` ratio wins. If only one can finish on time, that one wins. When Max Value is added, all on-time scenarios compete on capacity-per-dollar.
+Inference rule: If both Fastest Open and Max Capacity can complete on or before the school-year deadline (`09/08/26`), the scenario with higher `capacity / capex` ratio wins. If only one can finish on time, that one wins. When Max Value is added, all on-time scenarios compete on capacity-per-dollar.
+
+All open-date tokens render in `MM/DD/YY` format.
 
 ### Gap-Labeled Scenarios
 
@@ -117,8 +129,8 @@ Inference rule: If both Fastest Open and Max Capacity can complete before Aug 12
 
 | Token | Sindri Sources | Format |
 |---|---|---|
-| `exec.acquisition_conditions` | `inspection_best` (TI asks) + `sir_best` (zoning pre-conditions) + `permit_history` (violations) | Bullet list with source citations |
-| `exec.risk_notes` | `inspection_best` (MEP/structural) + `sir_best` (permit blockers) + `permit_history` (deferred maintenance) + `sir_delta`/`inspection_delta` (conflicts) + `opening_plan` (gating factors) | Bullet list with source citations |
+| `exec.acquisition_conditions` | `inspection_best` (TI asks) + `sir_best` (zoning pre-conditions) + `permit_history` (violations) | Bullet list with footnote citations. TI asks are consolidated into a single bullet with an itemized footnote. See SKILL.md *Footnote Citations — Never Inline*. |
+| `exec.risk_notes` | `inspection_best` (MEP/structural) + `sir_best` (permit blockers) + `permit_history` (deferred maintenance) + `sir_delta`/`inspection_delta` (conflicts) + `opening_plan` (gating factors) | Bullet list with footnote citations (superscripts ¹²³… + `Notes:` block). |
 
 ---
 
