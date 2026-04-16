@@ -420,7 +420,7 @@ Notes:
 
 The doc builder renders the body bullets and the `Notes:` block as two separate paragraph groups inside the same Acquisition Conditions / Risks to Note section — see `references/doc-builder-spec.md` Phase 6.
 
-### Step 7: Populate Source Document Links (6 tokens)
+### Step 7: Populate Supporting Document Links (7 tokens)
 
 | Token | Source | Display Label | Gap Label |
 |---|---|---|---|
@@ -429,6 +429,7 @@ The doc builder renders the body bullets and the `Notes:` block as two separate 
 | `sources.isp_link` | `source_doc_urls.isp` | "View ISP" | `[Not found - ISP]` |
 | `sources.e_occupancy_link` | `source_doc_urls.sir` (same as SIR — Phase 7 is embedded) | "View E-Occupancy" | `[Not found - E-Occupancy Assessment]` |
 | `sources.school_approval_link` | `source_doc_urls.school_approval` | "View School Approval" | `[Not found - School Approval Assessment]` |
+| `sources.opening_plan_link` | `source_doc_urls.opening_plan` | "View Opening Plan" | `[Not found - Opening Plan]` |
 | `sources.trace_link` | Auto-populated after build (trace JSON uploaded to Drive) | "View Report Trace" | (empty) |
 
 If a URL starts with `http`, render as a clickable hyperlink with the display label. Otherwise, show the gap label as plain text.
@@ -472,7 +473,7 @@ The builder creates a Google Doc from scratch using Google Docs API v1 `batchUpd
 4. Detailed Cost Breakdown table (13 rows x 3 cols: 12 line items + header)
 5. Notes for Acquisition Negotiations (free text)
 6. Risks to Note (free text)
-7. Source Documents table (7 rows x 2 cols)
+7. Supporting Documents table (8 rows x 2 cols)
 
 See `references/doc-builder-spec.md` for the full builder specification.
 
@@ -485,7 +486,7 @@ After the doc is built:
    - Unmatched keys and unfilled tokens
    - Token evidence excerpts
 2. Upload trace JSON to the site's Drive folder
-3. Insert the trace link into the Source Documents table (last row)
+3. Insert the trace link into the Supporting Documents table (last row)
 
 ### Step 12: Write Output to Sindri
 
@@ -532,7 +533,7 @@ After the doc is built:
 11. **Recommended Path is inferred, Max Value gets a gap label.** Recommended Path uses the capacity-per-dollar logic from Step 4. Max Value is gap-labeled until that data source exists in the pipeline.
 12. **The report is ready to send only when zero `{{token}}` patterns remain.** Gap labels (`[Not found - ...]`) are acceptable. Unfilled `{{tokens}}` are not.
 13. **Never fabricate construction timelines.** Dates come from the Opening Plan (WU-12). If the Opening Plan doesn't have a date, use a gap label that says what's missing — never insert a default estimate.
-14. **All support documents must have human-readable output.** Every upstream work unit that produces a support document (SIR, Building Inspection, ISP, School Approval, Opening Plan) must write both structured JSON to Sindri AND a human-readable document (markdown or PDF) to Google Drive. The DD Report links to the human-readable versions in the Source Documents table.
+14. **All support documents must have human-readable output.** Every upstream work unit that produces a support document (SIR, Building Inspection, ISP, School Approval, Opening Plan) must write both structured JSON to Sindri AND a human-readable document (markdown or PDF) to Google Drive. The DD Report links to the human-readable versions in the Supporting Documents table.
 
 ---
 

@@ -4,9 +4,9 @@ Each schema below defines the structured data this agent receives from upstream 
 
 **Human-readable output requirement:** Every upstream work unit that produces a support document must write BOTH:
 1. Structured JSON to Sindri (for this agent and downstream processing)
-2. A human-readable document (markdown rendered as PDF, or Google Doc) to Google Drive (for stakeholders, linked in the DD Report's Source Documents table)
+2. A human-readable document (markdown rendered as PDF, or Google Doc) to Google Drive (for stakeholders, linked in the DD Report's Supporting Documents table)
 
-The `source_doc_urls` payload at the bottom of this file points to the human-readable versions. If an upstream work unit only writes structured data and no human-readable document, the Source Documents link will show a gap label.
+The `source_doc_urls` payload at the bottom of this file points to the human-readable versions. If an upstream work unit only writes structured data and no human-readable document, the Supporting Documents link will show a gap label.
 
 ---
 

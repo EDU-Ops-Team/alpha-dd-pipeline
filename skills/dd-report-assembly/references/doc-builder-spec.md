@@ -119,14 +119,14 @@ The Google Docs API requires table cell indices to be read back from the live do
 7. Style: header = dark blue/white; alternating light gray (#F8F9FA) on odd data rows; labels bold; Grand Total row bold values
 8. Flush
 
-### Phase 6: Notes + Source Documents
+### Phase 6: Notes + Supporting Documents
 
 1. Re-read, find end index
-2. Insert "Notes and Source Documents" heading (H1)
+2. Insert "Notes and Supporting Documents" heading (H1)
 3. Insert "Acquisition Conditions" subheading (11pt bold) + `exec.acquisition_conditions` rendered as a body-and-footnotes card (see *Notes-Card Rendering* below)
 4. Insert "Risks to Note" subheading (11pt bold) + `exec.risk_notes` rendered as a body-and-footnotes card (see *Notes-Card Rendering* below)
-5. Insert "Source Documents" heading (H2)
-6. Insert source documents table (7 rows x 2 cols)
+5. Insert "Supporting Documents" heading (H2)
+6. Insert supporting documents table (8 rows x 2 cols)
 7. Flush
 
 #### Notes-Card Rendering (Acquisition Conditions and Risks to Note)
@@ -172,7 +172,7 @@ Notes:
 
 Validator: the number of distinct superscripts referenced in `bullets` must equal the number of `footnotes` entries, and every footnote number must appear at least once in the body.
 
-### Phase 7: Populate Source Documents Table
+### Phase 7: Populate Supporting Documents Table
 
 1. Re-read, find fourth table (index 3)
 2. Populate in reverse order:
@@ -185,7 +185,8 @@ Validator: the number of distinct superscripts referenced in `bullets` must equa
 | 3 | "ISP" | `sources.isp_link` | "View ISP" |
 | 4 | "Ease of Conversion Report" | `sources.e_occupancy_link` | "View E-Occupancy" |
 | 5 | "School Approval Report" | `sources.school_approval_link` | "View School Approval" |
-| 6 | "Trace Report" | `sources.trace_link` | "View Report Trace" |
+| 6 | "Opening Plan" | `sources.opening_plan_link` | "View Opening Plan" |
+| 7 | "Trace Report" | `sources.trace_link` | "View Report Trace" |
 
 3. Link values starting with `http`: render as clickable hyperlink with display label, blue color (#1155CC)
 4. Non-URL values: render as plain text
@@ -217,7 +218,7 @@ Font: Arial 10pt throughout. Exceptions: title 24pt, question 11pt, answer 12pt.
 | 0 | Header | 7 x 2 | Site metadata |
 | 1 | Build Scenarios | 4 x 4 | Capacity/CAPEX/Date by scenario (Fastest, Max Cap, Recommended) |
 | 2 | Cost Breakdown | 13 x 4 | 12 line items + header (3 scenarios + label col) |
-| 3 | Source Documents | 7 x 2 | Document links |
+| 3 | Supporting Documents | 8 x 2 | Document links |
 
 ---
 

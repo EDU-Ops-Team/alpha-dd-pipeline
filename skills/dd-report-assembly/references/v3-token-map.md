@@ -1,6 +1,6 @@
 # V3 Token Map — Complete Token-to-Sindri-Source Mapping
 
-Total tokens: 73 (7 meta + 6 exec card + 12 scenario summary + 48 cost breakdown + 2 notes + 6 sources — some overlap in counting)
+Total tokens: 74 (7 meta + 6 exec card + 12 scenario summary + 48 cost breakdown + 2 notes + 7 supporting documents — some overlap in counting)
 
 ---
 
@@ -134,7 +134,9 @@ All open-date tokens render in `MM/DD/YY` format.
 
 ---
 
-## Source Document Links (6)
+## Supporting Document Links (7)
+
+Rendered in the **Supporting Documents** table at the bottom of the report.
 
 | Token | Sindri Source | Display Label | Gap Label |
 |---|---|---|---|
@@ -143,6 +145,7 @@ All open-date tokens render in `MM/DD/YY` format.
 | `sources.isp_link` | `source_doc_urls.isp` | "View ISP" | `[Not found - ISP]` |
 | `sources.e_occupancy_link` | `source_doc_urls.sir` (Phase 7 embedded) | "View E-Occupancy" | `[Not found - E-Occupancy Assessment]` |
 | `sources.school_approval_link` | `source_doc_urls.school_approval` | "View School Approval" | `[Not found - School Approval Assessment]` |
+| `sources.opening_plan_link` | `source_doc_urls.opening_plan` | "View Opening Plan" | `[Not found - Opening Plan]` |
 | `sources.trace_link` | Auto-populated post-build | "View Report Trace" | (empty) |
 
 ---

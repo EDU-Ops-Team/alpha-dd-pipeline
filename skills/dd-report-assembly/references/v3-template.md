@@ -58,7 +58,7 @@ The V3 DD report is a structured one-pager (not prose). The Google Doc builder c
 | :---- |
 | {{exec.risk_notes}} |
 
-# Source Documents
+# Supporting Documents
 
 | Document | Link |
 | :---- | :---- |
@@ -67,6 +67,7 @@ The V3 DD report is a structured one-pager (not prose). The Google Doc builder c
 | **ISP** | {{sources.isp_link}} |
 | **Ease of Conversion Report** | {{sources.e_occupancy_link}} |
 | **School Approval Report** | {{sources.school_approval_link}} |
+| **Opening Plan** | {{sources.opening_plan_link}} |
 | **Trace Report** | {{sources.trace_link}} |
 
 ---
@@ -76,5 +77,5 @@ The V3 DD report is a structured one-pager (not prose). The Google Doc builder c
 - The actual Google Doc shows 3 active scenarios (Fastest Open, Max Capacity, Recommended Path)
 - Recommended Path is inferred using capacity-per-dollar logic (see SKILL.md Step 4)
 - Max Value exists in the token schema but is gap-labeled until that data source is added
-- Source document links render as clickable blue hyperlinks ("View SIR", "View ISP", etc.) when URLs are provided
+- Supporting document links render as clickable blue hyperlinks ("View SIR", "View ISP", "View Opening Plan", etc.) when URLs are provided
 - The Drive Folder row also renders as a hyperlink ("View Site Folder")
